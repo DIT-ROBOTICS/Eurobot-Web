@@ -1,12 +1,12 @@
-# Eurobot 2025 Robot Web UI
+# Eurobot 2026 Robot Web UI
 
 ![](docs/images/image_00.png)
 
-A comprehensive real-time web interface for monitoring and controlling Eurobot 2025 robots. This modern React-based dashboard provides intuitive visualization tools, real-time system monitoring, strategy planning, and robot control capabilities through ROS2 integration. The web-based architecture ensures universal compatibility across robot displays, iPads, laptops, and desktop computers, enabling flexible deployment and enhanced human-machine interaction during development and competition.
+A comprehensive real-time web interface for monitoring and controlling Eurobot 2026 robots. This modern React-based dashboard provides intuitive visualization tools, real-time system monitoring, strategy planning, and robot control capabilities through ROS2 integration. The web-based architecture ensures universal compatibility across robot displays, iPads, laptops, and desktop computers, enabling flexible deployment and enhanced human-machine interaction during development and competition.
 
 ## Project Overview
 
-This web UI serves as the central command center for Eurobot 2025 robots, offering:
+This web UI serves as the central command center for Eurobot 2026 robots, offering:
 
 - **Real-time robot monitoring** with live ROS2 data feeds
 - **Interactive 3D robot model viewer** with multiple model variants
@@ -26,7 +26,7 @@ This web UI serves as the central command center for Eurobot 2025 robots, offeri
 - **Parameter management** for navigation, rival detection, and strategy settings
 
 ### PLAYMAT
-- **Game field visualization** with official Eurobot 2025 playmat
+- **Game field visualization** with official Eurobot 2026 playmat
 - **Interactive strategy planning** with clickable game elements
 - **Real-time score calculation** and strategy optimization
 - **Plan sequence management** with save/load functionality
@@ -125,8 +125,8 @@ This web UI serves as the central command center for Eurobot 2025 robots, offeri
 
 1. **Clone the repository**
    ```bash
-   git clone https://github.com/DIT-ROBOTICS/Eurobot-2025-Web.git
-   cd Eurobot-2025-Web
+   git clone -b Eurobot-2026 https://github.com/DIT-ROBOTICS/Eurobot-Web.git
+   cd Eurobot-Web
    ```
 
 2. **Start development environment**
@@ -143,13 +143,13 @@ For development with hot-reloading and debugging:
 
 ```bash
 # Start development containers
-docker-compose -f docker-compose.dev.yml up -d
+docker compose -f docker-compose.dev.yml up -d
 
 # View logs
-docker-compose -f docker-compose.dev.yml logs -f app-dev
+docker compose -f docker-compose.dev.yml logs -f app-dev
 
 # Stop development environment
-docker-compose -f docker-compose.dev.yml down
+docker compose -f docker-compose.dev.yml down
 ```
 
 **Development server:** http://localhost:5173
@@ -159,13 +159,13 @@ For optimized production deployment:
 
 ```bash
 # Build and start production containers
-docker-compose up -d --build
+docker compose up -d --build
 
 # View logs
-docker-compose logs -f app
+docker compose logs -f app
 
 # Stop production environment
-docker-compose down
+docker compose down
 ```
 
 **Production server:** http://localhost:3000
