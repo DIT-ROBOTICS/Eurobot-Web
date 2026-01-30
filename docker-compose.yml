@@ -1,10 +1,10 @@
 services:
-  eurobot-2025-web:
+  eurobot-2026-web:
     build:
       context: .
       dockerfile: Dockerfile
-    image: scx/eurobot-2025-web:latest
-    container_name: eurobot-2025-web
+    image: cyhsiang/eurobot-2026-web:latest
+    container_name: eurobot-2026-web
     # ports:
     #   - "3000:3000"
     restart: unless-stopped
