@@ -125,8 +125,8 @@ This web UI serves as the central command center for Eurobot 2025 robots, offeri
 
 1. **Clone the repository**
    ```bash
-   git clone https://github.com/DIT-ROBOTICS/Eurobot-2025-Web.git
-   cd Eurobot-2025-Web
+   git clone -b Eurobot-2025 https://github.com/DIT-ROBOTICS/Eurobot-Web.git
+   cd Eurobot-Web
    ```
 
 2. **Start development environment**
@@ -143,13 +143,13 @@ For development with hot-reloading and debugging:
 
 ```bash
 # Start development containers
-docker-compose -f docker-compose.dev.yml up -d
+docker compose -f docker-compose.dev.yml up -d
 
 # View logs
-docker-compose -f docker-compose.dev.yml logs -f app-dev
+docker compose -f docker-compose.dev.yml logs -f app-dev
 
 # Stop development environment
-docker-compose -f docker-compose.dev.yml down
+docker compose -f docker-compose.dev.yml down
 ```
 
 **Development server:** http://localhost:5173
@@ -159,13 +159,13 @@ For optimized production deployment:
 
 ```bash
 # Build and start production containers
-docker-compose up -d --build
+docker compose up -d --build
 
 # View logs
-docker-compose logs -f app
+docker compose logs -f app
 
 # Stop production environment
-docker-compose down
+docker compose down
 ```
 
 **Production server:** http://localhost:3000
