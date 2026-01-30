@@ -6,7 +6,7 @@ import React, { useRef, useEffect, useCallback, useState } from 'react';
 //   export default content;
 // }
 
-import playmatImage from "../assets/playmat_2025_FINAL.png";
+import playmatImage from "../assets/playmat_2026_FINAL.png";
 import { useRosConnection } from "../utils/useRosConnection";
 import { getButtonStatesAndSequence, updateButtonStatesAndSequence } from "../api/fileOperations";
 
@@ -194,8 +194,8 @@ export default function Playmat() {
   // Set base button sizes
   const buttonSizes = {
     largeSquare: isHalfScreen ? "w-[170px] h-[170px]" : "w-[250px] h-[250px]",
-    wideRect: isHalfScreen ? "w-[170px] h-[70px]" : "w-[280px] h-[100px]",
-    tallRect: isHalfScreen ? "w-[80px] h-[180px]" : "w-[100px] h-[280px]",
+    wideRect: isHalfScreen ? "w-[170px] h-[70px]" : "w-[150px] h-[100px]",
+    tallRect: isHalfScreen ? "w-[80px] h-[180px]" : "w-[80px] h-[150px]",
     smallSquare: isHalfScreen ? "w-[500px] h-[85px]" : "w-[100px] h-[100px]"
   };
 
@@ -450,14 +450,14 @@ export default function Playmat() {
       <div className={isHalfScreen ? "relative transform-gpu scale-[0.92]" : "relative"}>
       <img
         src={playmatImage}
-        alt="Eurobot 2025 Playmat"
+        alt="Eurobot 2026 Playmat"
         className="max-h-[85vh] max-w-full object-contain rounded-xl shadow-lg"
       />
 
         {/* Change circular buttons to rounded squares (0-9) - using red-black theme */}
         {/* Button 0 - Top right - Blue */}
         <button
-          className={getButtonClassName(0, `absolute top-[12%] right-[20.5%] ${buttonSizes.wideRect} rounded-xl flex items-center justify-center`)}
+          className={getButtonClassName(0, `absolute top-[23.7%] right-[39.2%] ${buttonSizes.smallSquare} rounded-xl flex items-center justify-center`)}
           onClick={() => handleButtonClick(0)}
           disabled={isLoading}
         >
@@ -466,7 +466,7 @@ export default function Playmat() {
 
         {/* Button 1 - Right side - Black */}
         <button
-          className={getButtonClassName(1, `absolute top-[23.5%] right-[0.5%] ${buttonSizes.tallRect} rounded-xl flex items-center justify-center`)}
+          className={getButtonClassName(1, `absolute top-[34%] right-[4.5%] ${buttonSizes.tallRect} rounded-xl flex items-center justify-center`)}
           onClick={() => handleButtonClick(1)}
           disabled={isLoading}
         >
@@ -475,7 +475,7 @@ export default function Playmat() {
 
         {/* Button 2 - Bottom right - Black */}
         <button
-          className={getButtonClassName(2, `absolute bottom-[10.5%] right-[0.5%] ${buttonSizes.tallRect} rounded-xl flex items-center justify-center`)}
+          className={getButtonClassName(2, `absolute bottom-[15%] right-[4.5%] ${buttonSizes.tallRect} rounded-xl flex items-center justify-center`)}
           onClick={() => handleButtonClick(2)}
           disabled={isLoading}
         >
@@ -484,7 +484,7 @@ export default function Playmat() {
 
         {/* Button 3 - Right middle bottom - Black */}
         <button
-          className={getButtonClassName(3, `absolute bottom-[43%] right-[33%] ${buttonSizes.smallSquare} rounded-xl flex items-center justify-center`)}
+          className={getButtonClassName(3, `absolute bottom-[36.3%] right-[24.2%] ${buttonSizes.smallSquare} rounded-xl flex items-center justify-center`)}
           onClick={() => handleButtonClick(3)}
           disabled={isLoading}
         >
@@ -493,7 +493,7 @@ export default function Playmat() {
 
         {/* Button 4 - Right bottom side - Black */}
         <button
-          className={getButtonClassName(4, `absolute bottom-[8%] right-[19%] ${buttonSizes.wideRect} rounded-xl flex items-center justify-center`)}
+          className={getButtonClassName(4, `absolute bottom-[36.3%] right-[34.5%] ${buttonSizes.wideRect} rounded-xl flex items-center justify-center`)}
           onClick={() => handleButtonClick(4)}
           disabled={isLoading}
         >
@@ -502,7 +502,7 @@ export default function Playmat() {
 
         {/* Button 5 - Bottom middle left - Black */}
         <button
-          className={getButtonClassName(5, `absolute bottom-[8%] left-[19%] ${buttonSizes.wideRect} rounded-xl flex items-center justify-center`)}
+          className={getButtonClassName(5, `absolute bottom-[36.3%] left-[34.5%] ${buttonSizes.wideRect} rounded-xl flex items-center justify-center`)}
           onClick={() => handleButtonClick(5)}
           disabled={isLoading}
         >
@@ -511,7 +511,7 @@ export default function Playmat() {
 
         {/* Button 6 - Middle bottom - Black */}
         <button
-          className={getButtonClassName(6, `absolute bottom-[43%] left-[33%] ${buttonSizes.smallSquare} rounded-xl flex items-center justify-center`)}
+          className={getButtonClassName(6, `absolute bottom-[36.3%] left-[24.2%] ${buttonSizes.smallSquare} rounded-xl flex items-center justify-center`)}
           onClick={() => handleButtonClick(6)}
           disabled={isLoading}
         >
@@ -520,7 +520,7 @@ export default function Playmat() {
 
         {/* Button 7 - Bottom left - Black */}
         <button
-          className={getButtonClassName(7, `absolute bottom-[10.5%] left-[0.5%] ${buttonSizes.tallRect} rounded-xl flex items-center justify-center`)}
+          className={getButtonClassName(7, `absolute bottom-[15%] left-[4.5%] ${buttonSizes.tallRect} rounded-xl flex items-center justify-center`)}
           onClick={() => handleButtonClick(7)}
           disabled={isLoading}
         >
@@ -529,7 +529,7 @@ export default function Playmat() {
 
         {/* Button 8 - Left side - Black */}
         <button
-          className={getButtonClassName(8, `absolute top-[23.5%] left-[0.5%] ${buttonSizes.tallRect} rounded-xl flex items-center justify-center`)}
+          className={getButtonClassName(8, `absolute top-[34%] left-[4.5%] ${buttonSizes.tallRect} rounded-xl flex items-center justify-center`)}
           onClick={() => handleButtonClick(8)}
           disabled={isLoading}
         >
@@ -538,7 +538,7 @@ export default function Playmat() {
 
         {/* Button 9 - Top left - Yellow */}
         <button
-          className={getButtonClassName(9, `absolute top-[12%] left-[20.5%] ${buttonSizes.wideRect} rounded-xl flex items-center justify-center`)}
+          className={getButtonClassName(9, `absolute top-[23.7%] left-[39.2%] ${buttonSizes.smallSquare} rounded-xl flex items-center justify-center`)}
           onClick={() => handleButtonClick(9)}
           disabled={isLoading}
         >
@@ -557,7 +557,7 @@ export default function Playmat() {
 
         {/* Button 11 - Right side square - Yellow */}
         <button
-          className={getButtonClassName(11, `absolute top-[47%] right-[1%] ${buttonSizes.largeSquare} rounded-xl flex items-center justify-center`)}
+          className={getButtonClassName(11, `absolute top-[56.3%] right-[0.9%] ${buttonSizes.smallSquare} rounded-xl flex items-center justify-center`)}
           onClick={() => handleButtonClick(11)}
           disabled={isLoading}
         >
@@ -566,7 +566,7 @@ export default function Playmat() {
 
         {/* Button 12 - Bottom right corner square - Yellow */}
         <button
-          className={getButtonClassName(12, `absolute bottom-[0.5%] right-[0.5%] ${buttonSizes.wideRect} rounded-xl flex items-center justify-center`)}
+          className={getButtonClassName(12, `absolute bottom-[6%] right-[33%] ${buttonSizes.wideRect} rounded-xl flex items-center justify-center`)}
           onClick={() => handleButtonClick(12)}
           disabled={isLoading}
         >
@@ -575,7 +575,7 @@ export default function Playmat() {
 
         {/* Button 13 - Bottom middle square - Yellow */}
         <button
-          className={getButtonClassName(13, `absolute bottom-[2%] left-[34.8%] ${buttonSizes.largeSquare} rounded-xl flex items-center justify-center`)}
+          className={getButtonClassName(13, `absolute bottom-[1.5%] left-[47.6%] ${buttonSizes.smallSquare} rounded-xl flex items-center justify-center`)}
           onClick={() => handleButtonClick(13)}
           disabled={isLoading}
         >
@@ -584,7 +584,7 @@ export default function Playmat() {
 
         {/* Button 14 - Bottom left square - Yellow */}
         <button
-          className={getButtonClassName(14, `absolute bottom-[0.5%] left-[19%] ${buttonSizes.wideRect} rounded-xl flex items-center justify-center`)}
+          className={getButtonClassName(14, `absolute bottom-[1.3%] left-[21%] ${buttonSizes.smallSquare} rounded-xl flex items-center justify-center`)}
           onClick={() => handleButtonClick(14)}
           disabled={isLoading}
         >
@@ -593,7 +593,7 @@ export default function Playmat() {
 
         {/* Button 15 - Left side square - Blue */}
         <button
-          className={getButtonClassName(15, `absolute top-[47%] left-[1%] ${buttonSizes.largeSquare} rounded-xl flex items-center justify-center`)}
+          className={getButtonClassName(15, `absolute top-[56.3%] left-[0.9%] ${buttonSizes.smallSquare} rounded-xl flex items-center justify-center`)}
           onClick={() => handleButtonClick(15)}
           disabled={isLoading}
         >
@@ -602,7 +602,7 @@ export default function Playmat() {
 
         {/* Button 16 - Bottom left corner square - Blue */}
         <button
-          className={getButtonClassName(16, `absolute bottom-[0.5%] left-[0.5%] ${buttonSizes.wideRect} rounded-xl flex items-center justify-center`)}
+          className={getButtonClassName(16, `absolute bottom-[6%] left-[33%] ${buttonSizes.wideRect} rounded-xl flex items-center justify-center`)}
           onClick={() => handleButtonClick(16)}
           disabled={isLoading}
         >
@@ -611,7 +611,7 @@ export default function Playmat() {
 
         {/* Button 17 - Bottom right square - Blue */}
         <button
-          className={getButtonClassName(17, `absolute bottom-[2%] right-[34.8%] ${buttonSizes.largeSquare} rounded-xl flex items-center justify-center`)}
+          className={getButtonClassName(17, `absolute bottom-[36.3%] right-[47.5%] ${buttonSizes.smallSquare} rounded-xl flex items-center justify-center`)}
           onClick={() => handleButtonClick(17)}
           disabled={isLoading}
         >
@@ -620,7 +620,7 @@ export default function Playmat() {
 
         {/* Button 18 - Bottom right square - Blue */}
         <button
-          className={getButtonClassName(18, `absolute bottom-[0.5%] right-[19%] ${buttonSizes.wideRect} rounded-xl flex items-center justify-center`)}
+          className={getButtonClassName(18, `absolute bottom-[1.3%] right-[21%] ${buttonSizes.smallSquare} rounded-xl flex items-center justify-center`)}
           onClick={() => handleButtonClick(18)}
           disabled={isLoading}
         >
@@ -638,7 +638,7 @@ export default function Playmat() {
 
 
         {/* Score display - Smoky dark glass effect */}
-        <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 bg-black bg-opacity-15 px-12 py-8 rounded-xl border-0 shadow-lg min-w-[400px] backdrop-blur-lg">
+        <div className="absolute top-[43%] left-1/2 transform -translate-x-1/2 -translate-y-1/2 bg-black bg-opacity-15 px-12 py-8 rounded-xl border-0 shadow-lg min-w-[400px] backdrop-blur-lg">
           <div className="text-[#ff4d4d] text-3xl uppercase tracking-wider mb-5 text-center font-bold text-shadow-lg">Estimated Score</div>
           <div className="text-white text-9xl font-bold text-center tracking-wider text-shadow-lg drop-shadow-lg">{estimatedScore}</div>
         </div>
