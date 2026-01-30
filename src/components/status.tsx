@@ -47,7 +47,7 @@ export default function RobotDashboard() {
   const [hostname, setHostname] = useState(() => {
     // Get saved hostname from localStorage, use default if not found
     const saved = localStorage.getItem('bms-hostname');
-    return saved || "DIT-2025-10";
+    return saved || "DIT-2026-10";
   });
   // Use the shared ROS connection hook
   const { connected: rosConnected, getTopicHandler } = useRosConnection();
@@ -92,7 +92,7 @@ export default function RobotDashboard() {
 
   // Extract host number from hostname for connection URLs
   const hostNumber = hostname.split('-')[2] || "";
-  const bmsUrl = `http://dit-2025-${hostNumber}-esp.local/`;
+  const bmsUrl = `http://dit-2026-${hostNumber}-esp.local/`;
 
   // Detect half-screen mode
   useEffect(() => {
@@ -963,7 +963,7 @@ export default function RobotDashboard() {
               {isSettingOpen && (
                 <div className="bg-[#242424] p-4 rounded-md mb-4 relative">
                   <div className="flex flex-col">
-                    <label className="text-[#e0e0e0] text-xl mb-2">Hostname (e.g. DIT-2025-10)</label>
+                    <label className="text-[#e0e0e0] text-xl mb-2">Hostname (e.g. DIT-2026-10)</label>
                     <input 
                       type="text" 
                       value={hostnameInput} 

@@ -26,7 +26,7 @@ export function useRosConnection() {
     }
 
     // Get hostname from localStorage
-    const hostname = localStorage.getItem('bms-hostname') || "DIT-2025-10";
+    const hostname = localStorage.getItem('bms-hostname') || "DIT-2026-10";
     const hostNumber = hostname.split('-')[2] || "";
     const rosUrl = `ws://localhost:9090`;
 
