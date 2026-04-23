@@ -5,8 +5,6 @@ import ControlAreas from "./components/control";
 import { getStorageItem, setStorageItem } from "./utils/storage";
 import { VscScreenFull, VscScreenNormal, VscChevronUp, VscChevronDown } from "react-icons/vsc";
 import { MdOutlineFullscreen, MdOutlineFullscreenExit } from "react-icons/md";
-import "./assets/MStiffHeiHK.otf";
-
 // Define a Panel interface to standardize panel components
 interface Panel {
   id: string;
@@ -230,7 +228,7 @@ function App() {
   };
 
   return (
-    <div className="h-screen w-screen overflow-hidden flex flex-col bg-[#0e0e0e] text-white" style={{ fontFamily: "'MStiffHeiHK', sans-serif" }}>
+    <div className="h-screen w-screen overflow-hidden flex flex-col bg-[#0e0e0e] text-white" style={{ fontFamily: "var(--font-display)" }}>
       {/* Header with panel titles and display toggle - Dynamic Island style moved to right */}
       <div className={`flex ${isHalfScreen ? 'justify-end pr-5' : 'justify-center'} pt-5`}>
         <header className={`p-4 bg-[#181818] shadow-lg z-10 border border-[#333333] rounded-full w-auto ${isHalfScreen ? '' : 'mx-auto'} backdrop-blur-sm relative`}>

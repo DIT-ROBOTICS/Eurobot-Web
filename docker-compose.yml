@@ -3,7 +3,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    image: cyhsiang/eurobot-2026-web:latest
+    image: seanchangx/eurobot-2026-web:latest
     container_name: eurobot-2026-web
     # ports:
     #   - "3000:3000"

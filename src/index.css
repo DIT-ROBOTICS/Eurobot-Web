@@ -3,17 +3,17 @@
 
 @custom-variant dark (&:is(.dark *));
 
-/* Add font import */
 @font-face {
   font-family: 'MStiffHeiHK';
-  src: url('./assets/MStiffHeiHK.otf') format('opentype');
-  font-weight: normal;
+  src: url('/fonts/mstiffhei-hk-ultrabold.woff2') format('woff2');
+  font-weight: 100 900;
   font-style: normal;
   font-display: swap;
 }
 
 /* Add theme color variables */
 :root {
+  --font-display: 'MStiffHeiHK', ui-sans-serif, system-ui, sans-serif;
   --primary-bg: #0e0e0e;
   --secondary-bg: #181818;
   --accent-bg: #242424;
@@ -142,19 +142,21 @@
   }
   body {
     @apply bg-background text-foreground;
-    font-family: 'MStiffHeiHK', sans-serif;
+    font-family: var(--font-display);
     background-color: var(--primary-bg);
     color: var(--primary-text);
     font-size: 22px;
+    font-weight: normal;
+    font-synthesis: none;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
   }
   
-  /* Apply mechanical style font to headings and important elements */
-  h1, h2, h3, h4, h5, h6, 
-  .panel-title, 
-  .status-text, 
-  .control-title,
-  .font-mono {
-    font-family: 'MStiffHeiHK', monospace;
+  h1, h2, h3, h4, h5, h6,
+  .panel-title,
+  .status-text,
+  .control-title {
+    font-family: var(--font-display);
     letter-spacing: 0.05em;
     font-size: 140%;
   }

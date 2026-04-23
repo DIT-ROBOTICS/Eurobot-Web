@@ -868,12 +868,15 @@ export default function RobotDashboard() {
           <StatusPanel title="SIMA Status">
             <div className="grid grid-cols-2 gap-4 min-w-[300px]">
               {simaStatuses.map((sima) => (
-                <div 
-                  key={sima.id} 
-                  className="flex items-center space-x-3 mb-2"
+                <div
+                  key={sima.id}
+                  className="mb-2 flex items-center space-x-3"
                 >
-                  <div className={`w-6 h-6 rounded-full ${sima.connected ? "bg-[#4caf50]" : "bg-[#f44336]"} flex-shrink-0`}></div>
-                  <div className="text-[#e0e0e0] uppercase text-3xl">
+                  <div
+                    className={`h-8 w-8 shrink-0 rounded-full ${sima.connected ? "bg-[#4caf50]" : "bg-[#f44336]"}`}
+                    aria-hidden
+                  />
+                  <div className="-translate-y-[0.08em] flex min-h-8 items-center text-[#e0e0e0] text-3xl uppercase leading-none">
                     SIMA {sima.id}
                   </div>
                 </div>
@@ -1629,7 +1632,7 @@ export default function RobotDashboard() {
   );
 }
 
-function StatusPanel({ title, children }: { title: string; children?: React.ReactNode }) { // Made children optional
+function StatusPanel({ title, children }: { title: string; children?: React.ReactNode }) {
   return (
     <div className="bg-[#181818] p-6 rounded-lg shadow-md mb-6 w-full min-w-[300px]">
       {title && <h3 className="text-4xl font-bold text-[#ff4d4d] mb-6 uppercase">{title}</h3>}
@@ -1648,9 +1651,10 @@ function StatusItem({ color, label, key }: { color: string; label: string; key?:
   return (
     <div className="flex items-center space-x-5 mb-5">
       <div
-        className={`w-8 h-8 rounded-full ${colorMap[color as keyof typeof colorMap]} flex-shrink-0`}
-      ></div>
-      <div className="text-[#e0e0e0] tracking-wider uppercase text-3xl min-w-[180px] break-words">
+        className={`w-8 h-8 shrink-0 rounded-full ${colorMap[color as keyof typeof colorMap]}`}
+        aria-hidden
+      />
+      <div className="-translate-y-[0.08em] flex min-h-8 items-center text-[#e0e0e0] text-3xl uppercase leading-none tracking-wider min-w-[180px] break-words">
         {label}
       </div>
     </div>
@@ -1661,14 +1665,14 @@ function StatusItem({ color, label, key }: { color: string; label: string; key?:
 function CheckboxItem({ label, checked }: { label: string; checked: boolean }) {
   return (
     <div className="flex items-center space-x-5 mb-5">
-      <div className="w-8 h-8 border border-[#d32f2f] flex items-center justify-center flex-shrink-0">
+      <div className="flex h-8 w-8 shrink-0 items-center justify-center border border-[#d32f2f]">
         {checked ? (
-          <div className="w-5 h-5 bg-[#d32f2f]"></div>
+          <div className="h-5 w-5 bg-[#d32f2f]" />
         ) : (
-          <div className="w-5 h-5 bg-transparent"></div>
+          <div className="h-5 w-5 bg-transparent" />
         )}
       </div>
-      <div className="text-[#e0e0e0] tracking-wider uppercase text-3xl min-w-[180px] break-words">
+      <div className="-translate-y-[0.08em] flex min-h-8 items-center text-[#e0e0e0] text-3xl uppercase leading-none tracking-wider min-w-[180px] break-words">
         {label}
       </div>
     </div>
