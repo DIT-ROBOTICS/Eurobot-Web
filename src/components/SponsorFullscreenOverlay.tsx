@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { RxExitFullScreen } from "react-icons/rx";
 import { recordToObjectUrl, type SponsorRecord } from "../utils/sponsorIdb";
 
 /** One canvas draw: replaces hundreds of DOM/CSS animations to avoid stutter. */
@@ -72,16 +73,16 @@ function syncStarCanvas(
   return dpr;
 }
 
+/** Design-time px only — not tied to viewport, so window resize does not rescale the scene. Tuned to sit between typical laptop and old v·0.42-style sizing on large displays. */
+const FIXED_CENTER_LOGO_PX = 500;
+
 function nodeDiameters(sponsorCount: number): { center: number; sat: number } {
   const n = Math.max(0, sponsorCount);
   const t = n <= 0 ? 0.12 : n / 48;
   const inv = 1 - Math.min(0.9, t ** 0.55);
-  /** 贊助圖：人數多時略縮小，人數少時可大到約 120px。 */
-  const sat = Math.max(28, Math.min(120, Math.floor(40 + 70 * inv)));
-  const v = typeof window !== "undefined" ? viewportMinSize() : 600;
-  /** DIT：佔滿主視覺，約 42% 短邊，最大 480px。 */
-  const center = Math.max(150, Math.min(480, Math.floor(v * 0.42)));
-  return { center, sat };
+  /** 贊助圖：人數多時略縮小，人數少時可到大約 140px。 */
+  const sat = Math.max(34, Math.min(140, Math.floor(48 + 86 * inv)));
+  return { center: FIXED_CENTER_LOGO_PX, sat };
 }
 
 type SatWobble = {
@@ -117,22 +118,10 @@ function makeWobbles(n: number): SatWobble[] {
 /** Ring angular velocity (rad/s). Full turn ~57s at 0.11. */
 const ORBIT_RAD_S = 0.11;
 
-/** Use viewport, not a flex sub-box, so ring radius is never 0. */
-function viewportMinSize(): number {
-  if (typeof window === "undefined") return 400;
-  const vv = window.visualViewport;
-  if (vv && vv.width > 0 && vv.height > 0) {
-    return Math.min(vv.width, vv.height);
-  }
-  return Math.min(window.innerWidth, window.innerHeight) || 400;
-}
-
 function ringRadiusPx(nSponsors: number): number {
-  const minD = viewportMinSize();
   const n = Math.max(0, nSponsors);
-  /** 略大於先前，圖變大後仍保間距。 */
-  const r0 = minD * (0.26 + 0.012 * Math.min(24, n));
-  return r0 * 0.88;
+  /** Orbit radius in fixed px (viewport-independent), scaled with center logo. */
+  return 450 + Math.min(24, n) * 9.4;
 }
 
 type Props = {
@@ -390,22 +379,11 @@ export function SponsorFullscreenOverlay({ records, onClose, openOrigin, closeEx
         />
         <button
           type="button"
-          className="absolute right-3 top-3 z-[10000] flex h-16 min-h-16 w-16 min-w-16 cursor-pointer items-center justify-center rounded-lg border-2 border-white/25 bg-[#0a0a0a]/95 p-0 text-white shadow-lg hover:bg-white/10"
+          className="absolute bottom-7 left-1/2 z-[10000] flex h-16 w-16 -translate-x-1/2 cursor-pointer items-center justify-center rounded-full border border-white/20 bg-[#101010]/90 p-0 text-white shadow-[0_4px_24px_rgba(0,0,0,0.5)] backdrop-blur-md transition-[transform,background-color] hover:scale-105 hover:bg-white/10 active:scale-100"
           onClick={onClose}
-          aria-label="Close"
+          aria-label="Close sponsor view"
         >
-          <svg
-            className="block"
-            width="32"
-            height="32"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2.2"
-            strokeLinecap="round"
-          >
-            <path d="M18 6L6 18M6 6l12 12" />
-          </svg>
+          <RxExitFullScreen className="h-9 w-9 opacity-95" strokeWidth={0.5} aria-hidden />
         </button>
 
         <div

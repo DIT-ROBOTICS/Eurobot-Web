@@ -64,9 +64,96 @@ interface PlanSequence {
 
 // Default plan sequences (mission indices 0-17; remove corner slots 10/19)
 const DEFAULT_PLANS: PlanSequence[] = [
-  { id: 1, sequence: [0, 1, 2, 3, 4], description: "Plan A" },
-  { id: 2, sequence: [...Array(18).keys()], description: "Plan X" },
+  { id: 1, sequence: [0, 1, 2, 3, 4], description: "Default" },
+  { id: 2, sequence: [...Array(18).keys()], description: "All" },
 ];
+
+/**
+ * Full screen vs half screen: edit `full` and `half` separately.
+ * Button entries are position-only; sizes come from PLAYMAT_BUTTON_SIZES.
+ */
+const PLAYMAT_IMAGE_WRAP = {
+  full: "relative",
+  // Half: no flex-1 (see PLAYMAT_OUTER.half) so the playmat is only as tall as the art; score margin then reads.
+  half: "relative w-full min-h-0 shrink-0 transform-gpu scale-[0.92]",
+} as const;
+
+const PLAYMAT_OUTER = {
+  full: "relative flex w-full min-h-0 items-start justify-center bg-[#0e0e0e]",
+  // Column: plan, playmat (content-sized), then score. Do not use h-full+flex-1 on the playmat: that stretches the
+  // playmat row to the viewport, so the map sits at the top of a huge box and small mt-4 on the score is invisible
+  // “gap” in the already-empty area — margin tweaks have no feel.
+  half: "relative flex w-full min-h-0 flex-col items-stretch justify-start gap-4 bg-[#0e0e0e] transform-gpu origin-center",
+} as const;
+
+// Card chrome shared by full and half; full centers on the field, half is the same card placed in flow below the playmat.
+const PLAYMAT_SCORE_OUTER_CHROME =
+  "bg-black bg-opacity-15 px-12 py-8 rounded-xl border-0 shadow-lg min-w-[400px] max-w-full backdrop-blur-lg box-border";
+
+const PLAYMAT_SCORE_OUTER = {
+  full: `absolute top-[43%] left-1/2 transform -translate-x-1/2 -translate-y-1/2 z-10 ${PLAYMAT_SCORE_OUTER_CHROME}`,
+  // Half: same card as full; w-fit + self-center (w-full was stretching the bar to full row width). Max width aligned with plan strip.
+  // Extra top margin in addition to column gap (meant to read once flex-1 / h-full playmat is removed on half).
+  half: `relative z-10 mt-3 w-fit max-w-[min(100%,40rem)] shrink-0 self-center sm:mt-4 ${PLAYMAT_SCORE_OUTER_CHROME}`,
+} as const;
+
+const PLAYMAT_SCORE_TITLE_CLASS =
+  "text-3xl uppercase tracking-wider mb-5 text-center font-bold text-shadow-lg";
+
+const PLAYMAT_SCORE_VALUE_CLASS =
+  "text-white text-9xl font-bold text-center tracking-wider text-shadow-lg drop-shadow-lg";
+
+const PLAYMAT_CONTROL_OUTER = {
+  full: "absolute left-1/2 z-50 w-[90%] max-w-[600px] -translate-x-1/2 transform rounded-2xl border border-[#333333] bg-black/80 p-6 shadow-2xl backdrop-blur-xl top-6 sm:top-8",
+} as const;
+
+/** Half: sits above the playmat in normal flow (not over the field image). */
+const PLAYMAT_CONTROL_FLOW_HALF =
+  "relative z-20 w-full max-w-[min(100%,40rem)] shrink-0 self-center rounded-2xl border border-[#333333] bg-black/80 p-4 shadow-2xl backdrop-blur-xl sm:p-5" as const;
+
+// TO-DO: tune these sizes to fit playmat of each year.
+const PLAYMAT_BUTTON_SIZES = {
+  full: {
+    largeSquare: "w-[250px] h-[250px]",
+    wideRect: "w-[220px] h-[130px]",
+    tallRect: "w-[130px] h-[220px]",
+    smallSquare: "w-[130px] h-[130px]",
+  },
+  half: {
+    largeSquare: "w-[170px] h-[170px]",
+    wideRect: "w-[120px] h-[80px]",
+    tallRect: "w-[80px] h-[120px]",
+    smallSquare: "w-[85px] h-[85px]",
+  },
+} as const;
+
+const PLAYMAT_BUTTON_FONT = {
+  full: { large: "text-4xl", medium: "text-3xl" },
+  half: { large: "text-3xl", medium: "text-2xl" },
+} as const;
+
+// TO-DO: tune these positions for dual-monitor layout.
+/** `absolute` position classes per mission index; tune `half` for dual-monitor layout. */
+const MISSION_BTN_POS: Record<number, { full: string; half: string }> = {
+  0: { full: "absolute top-[55.2%] left-[0.1%]", half: "absolute top-[54.8%] left-[0%]" },
+  1: { full: "absolute bottom-[0.1%] left-[20.1%]", half: "absolute bottom-[0%] left-[20%]" },
+  2: { full: "absolute top-[55.2%] left-[23.5%]", half: "absolute top-[54.8%] left-[23.3%]" },
+  3: { full: "absolute top-[22.7%] left-[38.5%]", half: "absolute top-[22%] left-[38%]" },
+  4: { full: "absolute bottom-[0.1%] right-[46.8%]", half: "absolute bottom-[0%] right-[46.4%]" },
+  5: { full: "absolute top-[55.2%] right-[46.8%]", half: "absolute top-[54.8%] right-[46.4%]" },
+  6: { full: "absolute top-[22.7%] right-[38.5%]", half: "absolute top-[22%] right-[38%]" },
+  7: { full: "absolute top-[55.2%] right-[23.5%]", half: "absolute top-[54.8%] right-[23.3%]" },
+  8: { full: "absolute bottom-[0.1%] right-[20.1%]", half: "absolute bottom-[0%] right-[20%]" },
+  9: { full: "absolute top-[55.2%] right-[0.1%]", half: "absolute top-[54.8%] right-[0%]" },
+  10: { full: "absolute bottom-[15%] left-[4.5%]", half: "absolute bottom-[15%] left-[4.5%]" },
+  11: { full: "absolute top-[34%] left-[4.5%]", half: "absolute top-[34%] left-[4.5%]" },
+  12: { full: "absolute top-[55.2%] left-[33%]", half: "absolute top-[54.8%] left-[33%]" },
+  13: { full: "absolute bottom-[6%] left-[33%]", half: "absolute bottom-[6%] left-[33%]" },
+  14: { full: "absolute bottom-[15%] right-[4.5%]", half: "absolute bottom-[15%] right-[4.5%]" },
+  15: { full: "absolute top-[34%] right-[4.5%]", half: "absolute top-[34%] right-[4.5%]" },
+  16: { full: "absolute bottom-[6%] right-[33%]", half: "absolute bottom-[6%] right-[33%]" },
+  17: { full: "absolute top-[55.2%] right-[33%]", half: "absolute top-[54.8%] right-[33%]" },
+};
 
 export default function Playmat() {
   const [playmatBgId, setPlaymatBgId] = useState(() => {
@@ -242,24 +329,10 @@ export default function Playmat() {
     };
   }, [connected, getTopicHandler]);
 
-  // Set base button sizes
-  const buttonSizes = {
-    largeSquare: isHalfScreen ? "w-[170px] h-[170px]" : "w-[250px] h-[250px]",
-    wideRect: isHalfScreen ? "w-[170px] h-[70px]" : "w-[150px] h-[100px]",
-    tallRect: isHalfScreen ? "w-[80px] h-[180px]" : "w-[80px] h-[150px]",
-    smallSquare: isHalfScreen ? "w-[500px] h-[85px]" : "w-[100px] h-[100px]"
-  };
-
-  // Button font sizes
-  const fontSize = {
-    large: isHalfScreen ? "text-3xl" : "text-4xl",
-    medium: isHalfScreen ? "text-2xl" : "text-3xl"
-  };
-
-  // Top-align so the playmat and overlay are not pulled upward by vertical centering (avoids overlap with the floating tab bar; matches Robot Status flow)
-  const containerClasses = isHalfScreen
-    ? "relative flex items-center justify-center h-full w-full min-h-0 bg-[#0e0e0e] transform-gpu origin-center"
-    : "relative flex w-full min-h-0 items-start justify-center bg-[#0e0e0e]";
+  const buttonSizes = isHalfScreen ? PLAYMAT_BUTTON_SIZES.half : PLAYMAT_BUTTON_SIZES.full;
+  const fontSize = isHalfScreen ? PLAYMAT_BUTTON_FONT.half : PLAYMAT_BUTTON_FONT.full;
+  const containerClasses = isHalfScreen ? PLAYMAT_OUTER.half : PLAYMAT_OUTER.full;
+  const missionPos = (id: number) => (isHalfScreen ? MISSION_BTN_POS[id].half : MISSION_BTN_POS[id].full);
 
   // Load plans from localStorage
   useEffect(() => {
@@ -502,176 +575,17 @@ export default function Playmat() {
     return `${baseClasses} ${visualState.bg} ${visualState.text} ${visualState.border} transition-all duration-200`;
   };
 
-  return (
-    <div className="box-border h-full min-h-0 w-full min-w-0 overflow-y-auto overflow-x-hidden bg-[#0e0e0e] px-3 pt-[var(--app-chrome-pad-top)] pb-[var(--app-chrome-pad-bottom)] [overflow-anchor:none] sm:px-5 lg:px-6">
-      <div className={containerClasses}>
-      {/* Image container */}
-      <div className={isHalfScreen ? "relative transform-gpu scale-[0.92]" : "relative"}>
-      <img
-        src={playmatImage}
-        alt="Eurobot 2026 Playmat"
-        className="max-h-[85vh] max-w-full object-contain rounded-xl shadow-lg"
-      />
+  const renderScoreBlock = (outerClassName: string) => (
+    <div className={outerClassName}>
+      <div className={PLAYMAT_SCORE_TITLE_CLASS} style={{ color: "var(--theme-accent)" }}>
+        Estimated Score
+      </div>
+      <div className={PLAYMAT_SCORE_VALUE_CLASS}>{estimatedScore}</div>
+    </div>
+  );
 
-        {/* Mission point buttons: labels are mission index 0-17; corners 10/19 (old field) removed. */}
-        <button
-          className={getButtonClassName(6, `absolute top-[23.7%] right-[39.2%] ${buttonSizes.smallSquare} rounded-xl flex items-center justify-center`)}
-          onClick={() => handleButtonClick(6)}
-          disabled={isLoading}
-        >
-          <span className={`${fontSize.large} font-bold`}>6</span>
-        </button>
-
-        <button
-          className={getButtonClassName(15, `absolute top-[34%] right-[4.5%] ${buttonSizes.tallRect} rounded-xl flex items-center justify-center`)}
-          onClick={() => handleButtonClick(15)}
-          disabled={isLoading}
-        >
-          <span className={`${fontSize.large} font-bold`}>15</span>
-        </button>
-
-        <button
-          className={getButtonClassName(14, `absolute bottom-[15%] right-[4.5%] ${buttonSizes.tallRect} rounded-xl flex items-center justify-center`)}
-          onClick={() => handleButtonClick(14)}
-          disabled={isLoading}
-        >
-          <span className={`${fontSize.large} font-bold`}>14</span>
-        </button>
-
-        <button
-          className={getButtonClassName(7, `absolute bottom-[36.3%] right-[24.2%] ${buttonSizes.smallSquare} rounded-xl flex items-center justify-center`)}
-          onClick={() => handleButtonClick(7)}
-          disabled={isLoading}
-        >
-          <span className={`${fontSize.large} font-bold`}>7</span>
-        </button>
-
-        <button
-          className={getButtonClassName(17, `absolute bottom-[36.3%] right-[34.5%] ${buttonSizes.wideRect} rounded-xl flex items-center justify-center`)}
-          onClick={() => handleButtonClick(17)}
-          disabled={isLoading}
-        >
-          <span className={`${fontSize.large} font-bold`}>17</span>
-        </button>
-
-        <button
-          className={getButtonClassName(12, `absolute bottom-[36.3%] left-[34.5%] ${buttonSizes.wideRect} rounded-xl flex items-center justify-center`)}
-          onClick={() => handleButtonClick(12)}
-          disabled={isLoading}
-        >
-          <span className={`${fontSize.large} font-bold`}>12</span>
-        </button>
-
-        <button
-          className={getButtonClassName(2, `absolute bottom-[36.3%] left-[24.2%] ${buttonSizes.smallSquare} rounded-xl flex items-center justify-center`)}
-          onClick={() => handleButtonClick(2)}
-          disabled={isLoading}
-        >
-          <span className={`${fontSize.large} font-bold`}>2</span>
-        </button>
-
-        <button
-          className={getButtonClassName(10, `absolute bottom-[15%] left-[4.5%] ${buttonSizes.tallRect} rounded-xl flex items-center justify-center`)}
-          onClick={() => handleButtonClick(10)}
-          disabled={isLoading}
-        >
-          <span className={`${fontSize.large} font-bold`}>10</span>
-        </button>
-
-        <button
-          className={getButtonClassName(11, `absolute top-[34%] left-[4.5%] ${buttonSizes.tallRect} rounded-xl flex items-center justify-center`)}
-          onClick={() => handleButtonClick(11)}
-          disabled={isLoading}
-        >
-          <span className={`${fontSize.large} font-bold`}>11</span>
-        </button>
-
-        <button
-          className={getButtonClassName(3, `absolute top-[23.7%] left-[39.2%] ${buttonSizes.smallSquare} rounded-xl flex items-center justify-center`)}
-          onClick={() => handleButtonClick(3)}
-          disabled={isLoading}
-        >
-          <span className={`${fontSize.large} font-bold`}>3</span>
-        </button>
-
-        <button
-          className={getButtonClassName(9, `absolute top-[56.3%] right-[0.9%] ${buttonSizes.smallSquare} rounded-xl flex items-center justify-center`)}
-          onClick={() => handleButtonClick(9)}
-          disabled={isLoading}
-        >
-          <span className={`${fontSize.medium} font-bold`}>9</span>
-        </button>
-
-        <button
-          className={getButtonClassName(16, `absolute bottom-[6%] right-[33%] ${buttonSizes.wideRect} rounded-xl flex items-center justify-center`)}
-          onClick={() => handleButtonClick(16)}
-          disabled={isLoading}
-        >
-          <span className={`${fontSize.medium} font-bold`}>16</span>
-        </button>
-
-        <button
-          className={getButtonClassName(4, `absolute bottom-[1.5%] left-[47.6%] ${buttonSizes.smallSquare} rounded-xl flex items-center justify-center`)}
-          onClick={() => handleButtonClick(4)}
-          disabled={isLoading}
-        >
-          <span className={`${fontSize.medium} font-bold`}>4</span>
-        </button>
-
-        <button
-          className={getButtonClassName(1, `absolute bottom-[1.3%] left-[21%] ${buttonSizes.smallSquare} rounded-xl flex items-center justify-center`)}
-          onClick={() => handleButtonClick(1)}
-          disabled={isLoading}
-        >
-          <span className={`${fontSize.medium} font-bold`}>1</span>
-        </button>
-
-        <button
-          className={getButtonClassName(0, `absolute top-[56.3%] left-[0.9%] ${buttonSizes.smallSquare} rounded-xl flex items-center justify-center`)}
-          onClick={() => handleButtonClick(0)}
-          disabled={isLoading}
-        >
-          <span className={`${fontSize.medium} font-bold`}>0</span>
-        </button>
-
-        <button
-          className={getButtonClassName(13, `absolute bottom-[6%] left-[33%] ${buttonSizes.wideRect} rounded-xl flex items-center justify-center`)}
-          onClick={() => handleButtonClick(13)}
-          disabled={isLoading}
-        >
-          <span className={`${fontSize.medium} font-bold`}>13</span>
-        </button>
-
-        <button
-          className={getButtonClassName(5, `absolute bottom-[36.3%] right-[47.5%] ${buttonSizes.smallSquare} rounded-xl flex items-center justify-center`)}
-          onClick={() => handleButtonClick(5)}
-          disabled={isLoading}
-        >
-          <span className={`${fontSize.medium} font-bold`}>5</span>
-        </button>
-
-        <button
-          className={getButtonClassName(8, `absolute bottom-[1.3%] right-[21%] ${buttonSizes.smallSquare} rounded-xl flex items-center justify-center`)}
-          onClick={() => handleButtonClick(8)}
-          disabled={isLoading}
-        >
-          <span className={`${fontSize.medium} font-bold`}>8</span>
-        </button>
-
-
-        {/* Score display - Smoky dark glass effect */}
-        <div className="absolute top-[43%] left-1/2 transform -translate-x-1/2 -translate-y-1/2 bg-black bg-opacity-15 px-12 py-8 rounded-xl border-0 shadow-lg min-w-[400px] backdrop-blur-lg">
-          <div className="text-3xl uppercase tracking-wider mb-5 text-center font-bold text-shadow-lg" style={{ color: "var(--theme-accent)" }}>Estimated Score</div>
-          <div className="text-white text-9xl font-bold text-center tracking-wider text-shadow-lg drop-shadow-lg">{estimatedScore}</div>
-        </div>
-
-        {/* Integrated Control Panel */}
-        <div
-          className={`absolute left-1/2 z-50 w-[90%] max-w-[600px] -translate-x-1/2 transform rounded-2xl border border-[#333333] bg-black/80 p-6 shadow-2xl backdrop-blur-xl ${
-            isHalfScreen ? "top-4" : "top-6 sm:top-8"
-          }`}
-        >
-          <div className="flex flex-col gap-4">
+  const renderSequencePlanPanel = () => (
+        <div className="flex flex-col gap-4">
             {/* Top Section: Sequence Display and Plan Selection */}
             <div className="space-y-3">
               <div className="text-lg text-white font-medium">
@@ -759,7 +673,7 @@ export default function Playmat() {
                                 : undefined
                             }
                           >
-                            Plan {plan.id} — {plan.description}
+                            Plan {plan.id} - {plan.description}
                           </button>
                         ))}
                       </Popover.Content>
@@ -889,8 +803,181 @@ export default function Playmat() {
               </button>
             </div>
           </div>
-        </div>
+  );
+
+  return (
+    <div className="box-border h-full min-h-0 w-full min-w-0 overflow-y-auto overflow-x-hidden bg-[#0e0e0e] px-3 pt-[var(--app-chrome-pad-top)] pb-[var(--app-chrome-pad-bottom)] [overflow-anchor:none] sm:px-5 lg:px-6">
+      <div className={containerClasses}>
+        {isHalfScreen && (
+          <div className={PLAYMAT_CONTROL_FLOW_HALF}>
+            {renderSequencePlanPanel()}
+          </div>
+        )}
+        {/* Image container: mission controls + (full) floating plan panel */}
+        <div className={isHalfScreen ? PLAYMAT_IMAGE_WRAP.half : PLAYMAT_IMAGE_WRAP.full}>
+      <img
+        src={playmatImage}
+        alt="Eurobot 2026 Playmat"
+        className="max-h-[85vh] max-w-full object-contain rounded-xl shadow-lg"
+      />
+
+        {/* Mission point buttons: labels are mission index 0-17; corners 10/19 (old field) removed. */}
+        <button
+          className={getButtonClassName(6, `${missionPos(6)} ${buttonSizes.smallSquare} rounded-xl flex items-center justify-center`)}
+          onClick={() => handleButtonClick(6)}
+          disabled={isLoading}
+        >
+          <span className={`${fontSize.large} font-bold`}>6</span>
+        </button>
+
+        <button
+          className={getButtonClassName(15, `${missionPos(15)} ${buttonSizes.tallRect} rounded-xl flex items-center justify-center`)}
+          onClick={() => handleButtonClick(15)}
+          disabled={isLoading}
+        >
+          <span className={`${fontSize.large} font-bold`}>15</span>
+        </button>
+
+        <button
+          className={getButtonClassName(14, `${missionPos(14)} ${buttonSizes.tallRect} rounded-xl flex items-center justify-center`)}
+          onClick={() => handleButtonClick(14)}
+          disabled={isLoading}
+        >
+          <span className={`${fontSize.large} font-bold`}>14</span>
+        </button>
+
+        <button
+          className={getButtonClassName(7, `${missionPos(7)} ${buttonSizes.smallSquare} rounded-xl flex items-center justify-center`)}
+          onClick={() => handleButtonClick(7)}
+          disabled={isLoading}
+        >
+          <span className={`${fontSize.large} font-bold`}>7</span>
+        </button>
+
+        <button
+          className={getButtonClassName(17, `${missionPos(17)} ${buttonSizes.wideRect} rounded-xl flex items-center justify-center`)}
+          onClick={() => handleButtonClick(17)}
+          disabled={isLoading}
+        >
+          <span className={`${fontSize.large} font-bold`}>17</span>
+        </button>
+
+        <button
+          className={getButtonClassName(12, `${missionPos(12)} ${buttonSizes.wideRect} rounded-xl flex items-center justify-center`)}
+          onClick={() => handleButtonClick(12)}
+          disabled={isLoading}
+        >
+          <span className={`${fontSize.large} font-bold`}>12</span>
+        </button>
+
+        <button
+          className={getButtonClassName(2, `${missionPos(2)} ${buttonSizes.smallSquare} rounded-xl flex items-center justify-center`)}
+          onClick={() => handleButtonClick(2)}
+          disabled={isLoading}
+        >
+          <span className={`${fontSize.large} font-bold`}>2</span>
+        </button>
+
+        <button
+          className={getButtonClassName(10, `${missionPos(10)} ${buttonSizes.tallRect} rounded-xl flex items-center justify-center`)}
+          onClick={() => handleButtonClick(10)}
+          disabled={isLoading}
+        >
+          <span className={`${fontSize.large} font-bold`}>10</span>
+        </button>
+
+        <button
+          className={getButtonClassName(11, `${missionPos(11)} ${buttonSizes.tallRect} rounded-xl flex items-center justify-center`)}
+          onClick={() => handleButtonClick(11)}
+          disabled={isLoading}
+        >
+          <span className={`${fontSize.large} font-bold`}>11</span>
+        </button>
+
+        <button
+          className={getButtonClassName(3, `${missionPos(3)} ${buttonSizes.smallSquare} rounded-xl flex items-center justify-center`)}
+          onClick={() => handleButtonClick(3)}
+          disabled={isLoading}
+        >
+          <span className={`${fontSize.large} font-bold`}>3</span>
+        </button>
+
+        <button
+          className={getButtonClassName(9, `${missionPos(9)} ${buttonSizes.smallSquare} rounded-xl flex items-center justify-center`)}
+          onClick={() => handleButtonClick(9)}
+          disabled={isLoading}
+        >
+          <span className={`${fontSize.medium} font-bold`}>9</span>
+        </button>
+
+        <button
+          className={getButtonClassName(16, `${missionPos(16)} ${buttonSizes.wideRect} rounded-xl flex items-center justify-center`)}
+          onClick={() => handleButtonClick(16)}
+          disabled={isLoading}
+        >
+          <span className={`${fontSize.medium} font-bold`}>16</span>
+        </button>
+
+        <button
+          className={getButtonClassName(4, `${missionPos(4)} ${buttonSizes.smallSquare} rounded-xl flex items-center justify-center`)}
+          onClick={() => handleButtonClick(4)}
+          disabled={isLoading}
+        >
+          <span className={`${fontSize.medium} font-bold`}>4</span>
+        </button>
+
+        <button
+          className={getButtonClassName(1, `${missionPos(1)} ${buttonSizes.smallSquare} rounded-xl flex items-center justify-center`)}
+          onClick={() => handleButtonClick(1)}
+          disabled={isLoading}
+        >
+          <span className={`${fontSize.medium} font-bold`}>1</span>
+        </button>
+
+        <button
+          className={getButtonClassName(0, `${missionPos(0)} ${buttonSizes.smallSquare} rounded-xl flex items-center justify-center`)}
+          onClick={() => handleButtonClick(0)}
+          disabled={isLoading}
+        >
+          <span className={`${fontSize.medium} font-bold`}>0</span>
+        </button>
+
+        <button
+          className={getButtonClassName(13, `${missionPos(13)} ${buttonSizes.wideRect} rounded-xl flex items-center justify-center`)}
+          onClick={() => handleButtonClick(13)}
+          disabled={isLoading}
+        >
+          <span className={`${fontSize.medium} font-bold`}>13</span>
+        </button>
+
+        <button
+          className={getButtonClassName(5, `${missionPos(5)} ${buttonSizes.smallSquare} rounded-xl flex items-center justify-center`)}
+          onClick={() => handleButtonClick(5)}
+          disabled={isLoading}
+        >
+          <span className={`${fontSize.medium} font-bold`}>5</span>
+        </button>
+
+        <button
+          className={getButtonClassName(8, `${missionPos(8)} ${buttonSizes.smallSquare} rounded-xl flex items-center justify-center`)}
+          onClick={() => handleButtonClick(8)}
+          disabled={isLoading}
+        >
+          <span className={`${fontSize.medium} font-bold`}>8</span>
+        </button>
+
+
+        {/* Score: full = centered on playmat; half = same card, below the image in column flow (no overlay, same typography) */}
+        {!isHalfScreen && renderScoreBlock(PLAYMAT_SCORE_OUTER.full)}
+
+        {!isHalfScreen && (
+          <div className={PLAYMAT_CONTROL_OUTER.full}>
+            {renderSequencePlanPanel()}
+          </div>
+        )}
       </div>
+
+        {isHalfScreen && renderScoreBlock(PLAYMAT_SCORE_OUTER.half)}
       </div>
     </div>
   );

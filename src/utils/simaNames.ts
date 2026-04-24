@@ -11,7 +11,11 @@ const DEFAULT_NAMES = [
   'sima_08',
 ];
 
-/** ROS2 graph resource name: letter start, [a-zA-Z0-9_]* */
+/**
+ * ROS 2 / graph-style names (resource names, namespace segments, and typical topic
+ * name parts): one letter, then [a-zA-Z0-9_]*, max length 128.
+ * https://docs.ros.org/en/rolling/Concepts/About-Name-Types.html#ros-2-name-types
+ */
 const ROS2_NAME = /^[a-zA][a-zA-Z0-9_]*$/;
 
 export function isValidSimaName(name: string): boolean {

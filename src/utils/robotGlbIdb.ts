@@ -2,7 +2,7 @@ const DB_NAME = 'eurobot-web';
 const DB_VERSION = 2;
 const STORE = 'glb-models';
 const SPONSOR_STORE = 'sponsor-logos';
-import { ROBOT_GLB_ACTIVE_ID_KEY } from './storageKeys';
+import { EUROBOT_GLB_ID_LIST_KEY, ROBOT_GLB_ACTIVE_ID_KEY } from './storageKeys';
 
 export interface GlbModelRecord {
   id: string;
@@ -56,12 +56,35 @@ export async function listGlbModels(): Promise<Pick<GlbModelRecord, 'id' | 'name
   });
 }
 
-const LS_ID_LIST = 'eurobot-glb-id-list';
+export async function getAllGlbModelRecords(): Promise<GlbModelRecord[]> {
+  const db = await openDb();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE, 'readonly');
+    const r = tx.objectStore(STORE).getAll();
+    r.onerror = () => reject(r.error);
+    r.onsuccess = () => resolve((r.result as GlbModelRecord[]) ?? []);
+  });
+}
+
+/**
+ * Wipes all GLB and sponsor-logo blobs (same IndexedDB as sponsorIdb). Does not clear localStorage.
+ * Caller should reset keys and call notify / reload as needed.
+ */
+export async function clearGlbAndSponsorObjectStores(): Promise<void> {
+  const db = await openDb();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction([STORE, SPONSOR_STORE], 'readwrite');
+    tx.objectStore(STORE).clear();
+    tx.objectStore(SPONSOR_STORE).clear();
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+}
 
 export async function syncGlbIdListToLocalStorage(): Promise<void> {
   const list = await listGlbModels();
   try {
-    localStorage.setItem(LS_ID_LIST, JSON.stringify(list.map((x) => x.id)));
+    localStorage.setItem(EUROBOT_GLB_ID_LIST_KEY, JSON.stringify(list.map((x) => x.id)));
   } catch {
     /* */
   }

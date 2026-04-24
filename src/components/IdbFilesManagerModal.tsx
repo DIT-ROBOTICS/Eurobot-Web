@@ -88,7 +88,7 @@ const IdbListRow = memo(function IdbListRow({
           </span>
         )}
         <span
-          className="min-w-0 truncate text-left [font-family:var(--font-display)] text-lg font-bold leading-snug tracking-tight text-white/95 antialiased sm:text-xl"
+          className="min-w-0 truncate text-left [font-family:var(--font-idb-list)] text-lg font-bold leading-snug tracking-tight text-white/95 antialiased sm:text-xl"
         >
           {name}
         </span>

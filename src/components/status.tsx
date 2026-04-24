@@ -16,6 +16,8 @@ import {
   DEFAULT_ROBOT_CONFIG,
   RC_FIELD_GROUPS,
 } from "../utils/robotConfigFields";
+import { clsx } from "clsx";
+import { useIsHalfScreen } from "../hooks/useIsHalfScreen";
 
 interface UpdateStatus {
   message: string;
@@ -46,7 +48,6 @@ export default function RobotDashboard() {
   const hasReceivedBatteryRef = useRef(false);
   const [plugConnected, setPlugConnected] = useState(false); // Ready signal over plug interface
   const [lastPlugTrueTime, setLastPlugTrueTime] = useState(0); // Time when the last true plug signal was received
-  const [isHalfScreen, setIsHalfScreen] = useState(false); // New state for half-screen mode
   const [simaNames, setSimaNames] = useState<string[]>(() => parseSimaNamesFromStorage());
   const [simaOnline, setSimaOnline] = useState<Record<string, { ok: boolean; t: number }>>({});
   const [simaRenderTick, setSimaRenderTick] = useState(0);
@@ -68,9 +69,6 @@ export default function RobotDashboard() {
 
   const [robotConfig, setRobotConfig] = useState<RobotConfigFields>(DEFAULT_ROBOT_CONFIG);
   const [isVoltageAvailable, setIsVoltageAvailable] = useState(true);
-  // Long press reload state
-  const [pressTimer, setPressTimer] = useState<any>(null);
-  const [pressProgress, setPressProgress] = useState(0);
   // Device status (from ROS2 topics)
   const [deviceStatus, setDeviceStatus] = useState({
     chassis: false,
@@ -234,39 +232,6 @@ export default function RobotDashboard() {
   useEffect(() => {
     const i = setInterval(() => setSimaRenderTick((n) => n + 1), 400);
     return () => clearInterval(i);
-  }, []);
-
-  // Detect half-screen mode
-  useEffect(() => {
-    try {
-      const savedValue = localStorage.getItem('isHalfScreen');
-      setIsHalfScreen(savedValue === 'true');
-      
-      // Listen for changes to half-screen mode from other components
-      const checkHalfScreen = () => {
-        try {
-          const savedValue = localStorage.getItem('isHalfScreen');
-          setIsHalfScreen(savedValue === 'true');
-        } catch (error) {
-          console.warn('Could not detect half screen mode:', error);
-        }
-      };
-
-      // Add event listener for storage events
-      window.addEventListener('storage', checkHalfScreen);
-      document.addEventListener('visibilitychange', checkHalfScreen);
-      
-      // Also set up a polling mechanism to check periodically
-      const interval = setInterval(checkHalfScreen, 1000);
-      
-      return () => {
-        window.removeEventListener('storage', checkHalfScreen);
-        document.removeEventListener('visibilitychange', checkHalfScreen);
-        clearInterval(interval);
-      };
-    } catch (error) {
-      console.warn('Could not detect half screen mode:', error);
-    }
   }, []);
 
   // Subscribe to ROS topics using our shared connection
@@ -1066,6 +1031,155 @@ export default function RobotDashboard() {
   const gameTimeNum = Number.isFinite(gameTimeVal) ? gameTimeVal : 0;
   const gameTimeInt = Math.min(100, Math.max(0, Math.round(gameTimeNum)));
   const gameTimeProgress = Math.min(1, Math.max(0, gameTimeNum / 100));
+  const isHalfScreen = useIsHalfScreen();
+
+  const renderRobotConfigPanel = () => (
+      <StatusPanel title="Robot config">
+        <div className="flex flex-col">
+          {RC_FIELD_GROUPS.map((group, groupIdx) => (
+            <React.Fragment key={group.title}>
+              <h3
+                className={`text-xl font-bold text-white ${
+                  groupIdx > 0 ? "mt-6" : ""
+                }`}
+              >
+                {group.title}
+              </h3>
+              <div className="mt-4 flex min-w-0 flex-col space-y-4">
+                {group.specs.map((spec) => {
+                  const raw = robotConfig[spec.key];
+                  const v = spec.integer ? Math.round(raw) : raw;
+                  const setVal = (n: number) => {
+                    const c = spec.integer
+                      ? Math.min(spec.max, Math.max(spec.min, Math.round(n)))
+                      : Math.min(spec.max, Math.max(spec.min, n));
+                    setRobotConfig((o) => ({ ...o, [spec.key]: c }));
+                  };
+                  const show = spec.integer
+                    ? String(Math.round(v))
+                    : (Math.round(v * 1000) / 1000).toString();
+                  return (
+                    <div key={spec.key} className="min-w-0">
+                      <div className="flex items-center justify-between">
+                        <div className="text-[#e0e0e0] text-xl">
+                          {spec.label}:
+                        </div>
+                        <div className="text-right text-white text-xl font-bold tabular-nums">
+                          {show}
+                        </div>
+                      </div>
+                      <div className="mt-4 flex flex-col space-y-2">
+                        <input
+                          type="range"
+                          min={spec.min}
+                          max={spec.max}
+                          step={spec.step}
+                          value={v}
+                          onChange={(e) => {
+                            const n = spec.integer
+                              ? Math.round(parseFloat(e.target.value))
+                              : parseFloat(e.target.value);
+                            setVal(n);
+                          }}
+                          className="h-3 w-full cursor-pointer appearance-none rounded-lg bg-[#333]"
+                          aria-label={`${group.title} ${spec.label}`}
+                        />
+                        <div className="flex justify-between text-sm text-[#999]">
+                          <span>{spec.min}</span>
+                          <span>{spec.max}</span>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </React.Fragment>
+          ))}
+        </div>
+        <div className="w-full max-w-2xl sm:max-w-none">
+          <button
+            type="button"
+            className="relative mt-8 block w-full overflow-hidden rounded-md px-5 py-4 text-center text-xl font-bold uppercase tracking-wider text-white transition-all duration-300"
+            style={{
+              background:
+                activeButton === "robotConfigSave" && buttonPressProgress > 0
+                  ? `linear-gradient(to right, #4caf50 ${buttonPressProgress}%, var(--theme-accent) ${buttonPressProgress}%)`
+                  : "var(--theme-accent)",
+            }}
+            onMouseDown={() => startLongPress("robotConfigSave")}
+            onMouseUp={cancelLongPress}
+            onMouseLeave={cancelLongPress}
+            onTouchStart={() => startLongPress("robotConfigSave")}
+            onTouchEnd={cancelLongPress}
+          >
+            SAVE ROBOT CONFIG
+          </button>
+          <button
+            type="button"
+            className="relative mt-2 block w-full overflow-hidden rounded-md px-5 py-4 text-center text-xl font-bold uppercase tracking-wider text-white transition-all duration-300"
+            style={{
+              background:
+                activeButton === "robotConfigReset" && buttonPressProgress > 0
+                  ? `linear-gradient(to right, #4caf50 ${buttonPressProgress}%, #333 ${buttonPressProgress}%)`
+                  : "#333",
+            }}
+            onMouseDown={() => startLongPress("robotConfigReset")}
+            onMouseUp={cancelLongPress}
+            onMouseLeave={cancelLongPress}
+            onTouchStart={() => startLongPress("robotConfigReset")}
+            onTouchEnd={cancelLongPress}
+          >
+            RESET TO DEFAULTS
+          </button>
+          {robotConfigStatus.visible && (
+            <div
+              className={`mt-2 w-full text-center text-lg ${
+                robotConfigStatus.isError
+                  ? "text-theme-accent"
+                  : "bg-[#0a2e0a] text-[#6bff6b]"
+              } rounded-md py-2`}
+              style={
+                robotConfigStatus.isError
+                  ? { background: "color-mix(in srgb, var(--theme-accent) 14%, #1a0a0a)" }
+                  : undefined
+              }
+            >
+              {robotConfigStatus.message}
+            </div>
+          )}
+        </div>
+      </StatusPanel>
+  );
+
+  const renderStartupSignalPanel = () => (
+    <StatusPanel title="">
+      <div className="flex items-center space-x-6">
+        <div className="relative w-28 h-28 flex items-center justify-center">
+          <div className={`banter-loader ${!plugConnected && "banter-loader--inactive"}`}>
+            <div className="banter-loader__box"></div>
+            <div className="banter-loader__box"></div>
+            <div className="banter-loader__box"></div>
+            <div className="banter-loader__box"></div>
+            <div className="banter-loader__box"></div>
+            <div className="banter-loader__box"></div>
+            <div className="banter-loader__box"></div>
+            <div className="banter-loader__box"></div>
+            <div className="banter-loader__box"></div>
+          </div>
+        </div>
+
+        <div className="flex flex-col">
+          <div className="text-2xl font-bold text-white">Startup Signal</div>
+          <div
+            className="text-xl font-mono"
+            style={{ color: plugConnected ? "var(--theme-accent)" : "#777" }}
+          >
+            {plugConnected ? "READY" : "STANDBY"}
+          </div>
+        </div>
+      </div>
+    </StatusPanel>
+  );
 
   const sponsorFullScreenOverlay =
     sponsorOverlayOpen && sponsorRecords.length > 0 && typeof document !== "undefined"
@@ -1087,8 +1201,13 @@ export default function RobotDashboard() {
     <div
       className="h-full w-full min-h-0 overflow-y-auto overflow-x-hidden bg-[#0e0e0e] px-3 pt-[var(--app-chrome-pad-top)] pb-[var(--app-chrome-pad-bottom)] sm:px-5 lg:px-6 [overflow-anchor:none]"
     >
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className="space-y-6">
+      <div
+        className={clsx(
+          "grid grid-cols-1 gap-6",
+          isHalfScreen ? "lg:grid-cols-2" : "lg:grid-cols-3"
+        )}
+      >
+        <div className="min-w-0 space-y-6">
           {/* Status Indicators */}
           <StatusPanel title="System Status">
             {systemGroupOrder.map((name) => (
@@ -1107,6 +1226,95 @@ export default function RobotDashboard() {
             <CheckboxItem label="LIDAR" checked={deviceStatus.lidar} />
             <CheckboxItem label="IMU" checked={deviceStatus.imu} />
             <CheckboxItem label="ESP32" checked={deviceStatus.esp32} />
+          </StatusPanel>
+
+          {/* Battery Status — below Device Status */}
+          <StatusPanel title="BAT STATUS">
+            <div className="flex items-center gap-20 min-w-[300px]">
+              <div className="text-[#ffffff] text-7xl font-bold text-left py-5 relative">
+                {isVoltageAvailable ? (
+                  <span className="relative">
+                    {displayVoltage.toFixed(1)} <span className="text-5xl absolute bottom-2 -right-10">V</span>
+                  </span>
+                ) : (
+                  <span className="relative text-[#888888]">N/A</span>
+                )}
+                <div className="absolute bottom-0 left-0 h-1 w-full bg-gradient-to-r from-[var(--theme-accent)] to-transparent opacity-70"></div>
+              </div>
+
+              {/* Battery Icon - New Design */}
+              <div className="relative w-24 h-32">
+                {/* Battery body/outline */}
+                <div className="absolute inset-0 rounded-md border-2 border-[#555] bg-[#111] overflow-hidden flex flex-col">
+                  {/* Battery terminals at top */}
+                  <div className="h-3 w-full bg-[#333] border-b border-[#444] flex justify-center items-center">
+                    <div className="w-6 h-1.5 bg-[#666] rounded-sm"></div>
+                  </div>
+
+                  {/* Battery level container */}
+                  <div className="flex-1 relative p-0.5">
+                    {/* Battery level fill */}
+                    <div
+                      className="absolute bottom-0 left-0 right-0 transition-all duration-300"
+                      style={{
+                        height: `${getBatteryPercentage()}%`,
+                        background: isVoltageAvailable
+                          ? `linear-gradient(to top, ${getBatteryColor()}, ${getBatteryColor()}88)`
+                          : "linear-gradient(to top, #333, #444)",
+                        opacity: isVoltageAvailable ? 1 : 0.5,
+                      }}
+                    ></div>
+
+                    {/* Digital display overlay */}
+                    <div className="absolute inset-0 flex flex-col justify-center items-center">
+                      <div className="text-center">
+                        <div className="font-mono text-lg font-bold text-white mb-1">
+                          {isVoltageAvailable ? `${getBatteryPercentage()}%` : "N/A"}
+                        </div>
+                        {isVoltageAvailable && <div className="w-full h-0.5 bg-white opacity-30 mb-2"></div>}
+                        <div className="flex justify-center">
+                          {isVoltageAvailable &&
+                            [...Array(Math.min(5, Math.ceil(getBatteryPercentage() / 20)))].map((_, i) => (
+                              <div key={i} className="w-1 h-3 bg-white mx-0.5 opacity-80"></div>
+                            ))}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Battery grid pattern */}
+                    <div className="absolute inset-0 grid grid-cols-3 grid-rows-6 gap-[1px] pointer-events-none opacity-10">
+                      {[...Array(18)].map((_, i) => (
+                        <div key={i} className="border border-[#fff]"></div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Glowing indicator */}
+                <div
+                  className="absolute top-2 right-2 w-2 h-2 rounded-full transition-colors duration-300"
+                  style={{
+                    backgroundColor: getBatteryColor(),
+                    boxShadow: isVoltageAvailable ? `0 0 8px ${getBatteryColor()}` : "none",
+                    opacity: isVoltageAvailable ? 1 : 0.3,
+                  }}
+                ></div>
+              </div>
+            </div>
+          </StatusPanel>
+
+          <StatusPanel title="ESP-Daemon">
+            <div className="flex flex-col gap-3">
+              <a
+                href={bmsUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-white text-2xl font-bold py-4 px-6 rounded-md w-full block text-center tracking-wider transition-colors"
+                style={{ backgroundColor: "var(--theme-accent)" }}
+              >
+                Connect
+              </a>
+            </div>
           </StatusPanel>
 
           <StatusPanel title="Manual control">
@@ -1142,158 +1350,24 @@ export default function RobotDashboard() {
             </div>
           </StatusPanel>
 
-          <StatusPanel title="Robot config">
-            <div className="flex flex-col">
-              {RC_FIELD_GROUPS.map((group, groupIdx) => (
-                <React.Fragment key={group.title}>
-                  <h3
-                    className={`text-xl font-bold text-white ${
-                      groupIdx > 0 ? "mt-6" : ""
-                    }`}
-                  >
-                    {group.title}
-                  </h3>
-                  <div className="mt-4 flex min-w-0 flex-col space-y-4">
-                    {group.specs.map((spec) => {
-                    const raw = robotConfig[spec.key];
-                    const v = spec.integer ? Math.round(raw) : raw;
-                    const setVal = (n: number) => {
-                      const c = spec.integer
-                        ? Math.min(spec.max, Math.max(spec.min, Math.round(n)))
-                        : Math.min(spec.max, Math.max(spec.min, n));
-                      setRobotConfig((o) => ({ ...o, [spec.key]: c }));
-                    };
-                    const show =
-                      spec.integer
-                        ? String(Math.round(v))
-                        : (Math.round(v * 1000) / 1000).toString();
-                    return (
-                      <div key={spec.key} className="min-w-0">
-                        <div className="flex items-center justify-between">
-                          <div className="text-[#e0e0e0] text-xl">
-                            {spec.label}:
-                          </div>
-                          <div className="text-right text-white text-xl font-bold tabular-nums">
-                            {show}
-                          </div>
-                        </div>
-                        <div className="mt-4 flex flex-col space-y-2">
-                          <input
-                            type="range"
-                            min={spec.min}
-                            max={spec.max}
-                            step={spec.step}
-                            value={v}
-                            onChange={(e) => {
-                              const n = spec.integer
-                                ? Math.round(parseFloat(e.target.value))
-                                : parseFloat(e.target.value);
-                              setVal(n);
-                            }}
-                            className="h-3 w-full cursor-pointer appearance-none rounded-lg bg-[#333]"
-                            aria-label={`${group.title} ${spec.label}`}
-                          />
-                          <div className="flex justify-between text-sm text-[#999]">
-                            <span>{spec.min}</span>
-                            <span>{spec.max}</span>
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })}
-                  </div>
-                </React.Fragment>
-              ))}
-            </div>
-            <div className="w-full max-w-2xl sm:max-w-none">
-              <button
-                type="button"
-                className="relative mt-8 block w-full overflow-hidden rounded-md px-5 py-4 text-center text-xl font-bold uppercase tracking-wider text-white transition-all duration-300"
-                style={{
-                  background:
-                    activeButton === "robotConfigSave" && buttonPressProgress > 0
-                      ? `linear-gradient(to right, #4caf50 ${buttonPressProgress}%, var(--theme-accent) ${buttonPressProgress}%)`
-                      : "var(--theme-accent)",
-                }}
-                onMouseDown={() => startLongPress("robotConfigSave")}
-                onMouseUp={cancelLongPress}
-                onMouseLeave={cancelLongPress}
-                onTouchStart={() => startLongPress("robotConfigSave")}
-                onTouchEnd={cancelLongPress}
-              >
-                SAVE ROBOT CONFIG
-              </button>
-              <button
-                type="button"
-                className="relative mt-2 block w-full overflow-hidden rounded-md px-5 py-4 text-center text-xl font-bold uppercase tracking-wider text-white transition-all duration-300"
-                style={{
-                  background:
-                    activeButton === "robotConfigReset" && buttonPressProgress > 0
-                      ? `linear-gradient(to right, #4caf50 ${buttonPressProgress}%, #333 ${buttonPressProgress}%)`
-                      : "#333",
-                }}
-                onMouseDown={() => startLongPress("robotConfigReset")}
-                onMouseUp={cancelLongPress}
-                onMouseLeave={cancelLongPress}
-                onTouchStart={() => startLongPress("robotConfigReset")}
-                onTouchEnd={cancelLongPress}
-              >
-                RESET TO DEFAULTS
-              </button>
-              {robotConfigStatus.visible && (
-                <div
-                  className={`mt-2 w-full text-center text-lg ${
-                    robotConfigStatus.isError
-                      ? "text-theme-accent"
-                      : "bg-[#0a2e0a] text-[#6bff6b]"
-                  } rounded-md py-2`}
-                  style={
-                    robotConfigStatus.isError
-                      ? { background: "color-mix(in srgb, var(--theme-accent) 14%, #1a0a0a)" }
-                      : undefined
-                  }
-                >
-                  {robotConfigStatus.message}
-                </div>
-              )}
-            </div>
-          </StatusPanel>
-
-          {/* 3D Model */}
-          <Status3DModel />
+          {isHalfScreen && (
+            <>
+              <Status3DModel />
+              {renderRobotConfigPanel()}
+            </>
+          )}
         </div>
 
-        <div className="space-y-6">
+        {!isHalfScreen && (
+          <div className="min-w-0 space-y-6">
+            {renderStartupSignalPanel()}
+            <Status3DModel />
+            {renderRobotConfigPanel()}
+          </div>
+        )}
 
-          {/* Robot Ready Signal Status */}
-          <StatusPanel title="">
-            <div className="flex items-center space-x-6">
-              <div className="relative w-28 h-28 flex items-center justify-center">
-                {/* Banter Loader Animation */}
-                <div className={`banter-loader ${!plugConnected && 'banter-loader--inactive'}`}>
-                  <div className="banter-loader__box"></div>
-                  <div className="banter-loader__box"></div>
-                  <div className="banter-loader__box"></div>
-                  <div className="banter-loader__box"></div>
-                  <div className="banter-loader__box"></div>
-                  <div className="banter-loader__box"></div>
-                  <div className="banter-loader__box"></div>
-                  <div className="banter-loader__box"></div>
-                  <div className="banter-loader__box"></div>
-                </div>
-              </div>
-              
-              <div className="flex flex-col">
-                <div className="text-2xl font-bold text-white">Startup Signal</div>
-                <div
-                  className="text-xl font-mono"
-                  style={{ color: plugConnected ? "var(--theme-accent)" : "#777" }}
-                >
-                  {plugConnected ? "READY" : "STANDBY"}
-                </div>
-              </div>
-            </div>
-          </StatusPanel>
+        <div className="min-w-0 space-y-6">
+          {isHalfScreen && renderStartupSignalPanel()}
 
           <StatusPanel title="Game">
             <div className="flex w-full min-w-0 flex-col gap-4 sm:flex-row">
@@ -1407,96 +1481,6 @@ export default function RobotDashboard() {
                   </div>
                 );
               })}
-            </div>
-          </StatusPanel>
-
-          {/* Battery Status */}
-          <StatusPanel title="BAT STATUS">
-            <div className="flex items-center gap-20 min-w-[300px]">
-              <div className="text-[#ffffff] text-7xl font-bold text-left py-5 relative">
-                {isVoltageAvailable ? (
-                  <span className="relative">
-                    {displayVoltage.toFixed(1)} <span className="text-5xl absolute bottom-2 -right-10">V</span>
-                  </span>
-                ) : (
-                  <span className="relative text-[#888888]">N/A</span>
-                )}
-                <div className="absolute bottom-0 left-0 h-1 w-full bg-gradient-to-r from-[var(--theme-accent)] to-transparent opacity-70"></div>
-              </div>
-              
-              {/* Battery Icon - New Design */}
-              <div className="relative w-24 h-32">
-                {/* Battery body/outline */}
-                <div className="absolute inset-0 rounded-md border-2 border-[#555] bg-[#111] overflow-hidden flex flex-col">
-                  {/* Battery terminals at top */}
-                  <div className="h-3 w-full bg-[#333] border-b border-[#444] flex justify-center items-center">
-                    <div className="w-6 h-1.5 bg-[#666] rounded-sm"></div>
-                  </div>
-                  
-                  {/* Battery level container */}
-                  <div className="flex-1 relative p-0.5">
-                    {/* Battery level fill */}
-                    <div 
-                      className="absolute bottom-0 left-0 right-0 transition-all duration-300"
-                      style={{ 
-                        height: `${getBatteryPercentage()}%`,
-                        background: isVoltageAvailable 
-                          ? `linear-gradient(to top, ${getBatteryColor()}, ${getBatteryColor()}88)`
-                          : 'linear-gradient(to top, #333, #444)',
-                        opacity: isVoltageAvailable ? 1 : 0.5
-                      }}
-                    ></div>
-                    
-                    {/* Digital display overlay */}
-                    <div className="absolute inset-0 flex flex-col justify-center items-center">
-                      <div className="text-center">
-                        <div className="font-mono text-lg font-bold text-white mb-1">
-                          {isVoltageAvailable ? `${getBatteryPercentage()}%` : "N/A"}
-                        </div>
-                        {isVoltageAvailable && (
-                          <div className="w-full h-0.5 bg-white opacity-30 mb-2"></div>
-                        )}
-                        <div className="flex justify-center">
-                          {isVoltageAvailable && [...Array(Math.min(5, Math.ceil(getBatteryPercentage() / 20)))].map((_, i) => (
-                            <div key={i} className="w-1 h-3 bg-white mx-0.5 opacity-80"></div>
-                          ))}
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Battery grid pattern */}
-                    <div className="absolute inset-0 grid grid-cols-3 grid-rows-6 gap-[1px] pointer-events-none opacity-10">
-                      {[...Array(18)].map((_, i) => (
-                        <div key={i} className="border border-[#fff]"></div>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-                
-                {/* Glowing indicator */}
-                <div 
-                  className="absolute top-2 right-2 w-2 h-2 rounded-full transition-colors duration-300"
-                  style={{ 
-                    backgroundColor: getBatteryColor(),
-                    boxShadow: isVoltageAvailable ? `0 0 8px ${getBatteryColor()}` : 'none',
-                    opacity: isVoltageAvailable ? 1 : 0.3
-                  }}
-                ></div>
-              </div>
-            </div>
-          </StatusPanel>
-          
-          <StatusPanel title="ESP-Daemon">
-            <div className="flex flex-col gap-3">
-              <a
-                href={bmsUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-white text-2xl font-bold py-4 px-6 rounded-md w-full block text-center tracking-wider transition-colors"
-                style={{ backgroundColor: "var(--theme-accent)" }}
-              >
-                Connect
-              </a>
             </div>
           </StatusPanel>
 
@@ -1751,93 +1735,6 @@ export default function RobotDashboard() {
             </div>
           </StatusPanel>
         </div>
-      </div>
-
-      {/* Long-press now replaces the confirmation dialog */}
-
-      {/* Floating Bridge Status Indicator - Now a refresh button */}
-      <div 
-        className={`fixed ${
-          isHalfScreen ? "bottom-30" : "bottom-20"
-        } right-6 z-50 flex max-w-[min(100%,calc(100vw-1.5rem))] cursor-pointer select-none items-center gap-6 rounded-2xl border-2 border-[#444] bg-black/70 px-5 py-4 shadow-2xl backdrop-blur-md transition-all duration-300 sm:right-8 sm:gap-8 sm:px-8 sm:py-5`}
-        style={{
-          background: pressProgress > 0 
-            ? `linear-gradient(to right, rgba(76, 175, 80, 0.8) ${pressProgress}%, rgba(0, 0, 0, 0.7) ${pressProgress}%)`
-            : 'rgba(0, 0, 0, 0.7)'
-        }}
-        onMouseDown={() => {
-          // Start long-press timer
-          const timer = setInterval(() => {
-            setPressProgress((prev: number) => { // Add type for prev
-              const newProgress = prev + (100/10); // Complete in 1 second (10×100ms)
-              if (newProgress >= 100) {
-                // Reload the page
-                window.location.reload();
-                clearInterval(timer);
-                return 0;
-              }
-              return newProgress;
-            });
-          }, 100);
-          setPressTimer(timer);
-        }}
-        onMouseUp={() => {
-          // Cancel long-press
-          if (pressTimer) {
-            clearInterval(pressTimer);
-            setPressTimer(null);
-            setPressProgress(0);
-          }
-        }}
-        onMouseLeave={() => {
-          // Also cancel on mouse leave
-          if (pressTimer) {
-            clearInterval(pressTimer);
-            setPressTimer(null);
-            setPressProgress(0);
-          }
-        }}
-        onTouchStart={() => {
-          // Start long-press timer (touch screen)
-          const timer = setInterval(() => {
-            setPressProgress((prev: number) => { // Add type for prev
-              const newProgress = prev + (100/10); // Complete in 1 second
-              if (newProgress >= 100) {
-                // Reload the page
-                window.location.reload();
-                clearInterval(timer);
-                return 0;
-              }
-              return newProgress;
-            });
-          }, 100);
-          setPressTimer(timer);
-        }}
-        onTouchEnd={() => {
-          // Cancel long-press (touch screen)
-          if (pressTimer) {
-            clearInterval(pressTimer);
-            setPressTimer(null);
-            setPressProgress(0);
-          }
-        }}
-      >
-        <div className="relative">
-          <div className={`w-8 h-8 rounded-full ${rosConnected ? "bg-theme-accent" : "bg-[#444]"}`}></div>
-          {rosConnected && (
-            <div className="absolute inset-0 w-8 h-8 rounded-full bg-theme-accent animate-ping opacity-75"></div>
-          )}
-        </div>
-        <div className="flex flex-col">
-          <div className="text-white text-2xl font-mono font-bold leading-tight">
-            ROS Bridge
-          </div>
-          <div className={`text-xl font-mono ${rosConnected ? "text-theme-accent" : "text-[#999]"}`}>
-            {rosConnected ? "Connected" : "Press to refresh"}
-          </div>
-        </div>
-        
-        {/* Long-press progress is now shown with background gradient */}
       </div>
 
       {/* Add extra bottom space to prevent content from being hidden behind fixed elements */}

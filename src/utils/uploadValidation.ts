@@ -115,31 +115,31 @@ export function validateJsonMissionPlansJson(content: string): { ok: true; data:
   return { ok: true, data: parsed };
 }
 
-const DEFAULT_HEX = "#e64545";
+const DEFAULT_HEX = "#E64545";
 
 /**
- * 6-char #rrggbb for HTML color inputs (falls back to saved accent or default).
+ * 6-char #RRGGBB for HTML color inputs (falls back to saved accent or default); hex digits are uppercase.
  */
 export function toHex6ForColorInput(s: string, fallback: string = DEFAULT_HEX): string {
   const t = s.trim();
-  if (/^#[0-9a-fA-F]{6}$/i.test(t)) return t.toLowerCase();
+  if (/^#[0-9a-fA-F]{6}$/i.test(t)) return t.toUpperCase();
   if (/^#[0-9a-fA-F]{3}$/i.test(t) && t.length === 4) {
     const a = t.slice(1);
-    return `#${a[0]}${a[0]}${a[1]}${a[1]}${a[2]}${a[2]}`.toLowerCase();
+    return `#${a[0]}${a[0]}${a[1]}${a[1]}${a[2]}${a[2]}`.toUpperCase();
   }
   const noHash = t.replace(/^#/, "");
   if (/^[0-9a-fA-F]{6}$/i.test(noHash) && noHash.length === 6) {
-    return ("#" + noHash).toLowerCase();
+    return ("#" + noHash).toUpperCase();
   }
   if (!t.startsWith("#") && /^[0-9a-fA-F]{3}$/i.test(t) && t.length === 3) {
     return toHex6ForColorInput("#" + t, fallback);
   }
   if (!t.startsWith("#") && /^[0-9a-fA-F]{6}$/i.test(t) && t.length === 6) {
-    return ("#" + t).toLowerCase();
+    return ("#" + t).toUpperCase();
   }
   const f = String(fallback).trim();
   if (f && f !== t) {
-    if (/^#[0-9a-fA-F]{6}$/i.test(f)) return f.toLowerCase();
+    if (/^#[0-9a-fA-F]{6}$/i.test(f)) return f.toUpperCase();
     if (f.startsWith("#") && /^#?[0-9a-fA-F]{3,8}$/i.test(f)) {
       return toHex6ForColorInput(f, DEFAULT_HEX);
     }
@@ -161,7 +161,7 @@ export function normalizeThemeColorUserInput(raw: string, fallback: string): str
     return s;
   }
   if (/^[0-9a-fA-F]{3}$/i.test(s) || /^[0-9a-fA-F]{6}$/i.test(s)) {
-    return s.length === 3 ? toHex6ForColorInput(`#${s}`, fallback) : `#${s}`.toLowerCase();
+    return s.length === 3 ? toHex6ForColorInput(`#${s}`, fallback) : `#${s}`.toUpperCase();
   }
   return s; // e.g. "red"
 }

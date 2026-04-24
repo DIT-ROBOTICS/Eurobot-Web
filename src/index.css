@@ -12,9 +12,9 @@
   font-display: swap;
 }
 
-/* Explicit bold for components that set font-weight: 700 (browser prefers this over the above range). */
+/* IdbFilesManagerModal file list only — separate family so global MStiffHeiHK + font-bold stays unchanged. */
 @font-face {
-  font-family: 'MStiffHeiHK';
+  font-family: 'MStiffHeiHK-IdbList';
   src: url('/fonts/mstiffhei-hk-bold.woff2') format('woff2');
   font-weight: 700;
   font-style: normal;
@@ -24,6 +24,7 @@
 /* Add theme color variables; --theme-accent is set in JS (applyTheme) */
 :root {
   --font-display: 'MStiffHeiHK', ui-sans-serif, system-ui, sans-serif;
+  --font-idb-list: "MStiffHeiHK-IdbList", var(--font-ui, ui-sans-serif, system-ui, sans-serif);
   --primary-bg: #0e0e0e;
   --secondary-bg: #181818;
   --accent-bg: #242424;
@@ -42,6 +43,9 @@
   /* App shell: main is full-bleed; top/bottom nav floats above — scroll regions use as safe padding */
   --app-chrome-pad-top: 8.5rem;
   --app-chrome-pad-bottom: 14.5rem;
+  /* iOS-style motion (no spring overshoot, smooth decel) for layout + panel slides */
+  --app-ease-spring: cubic-bezier(0.32, 0.72, 0, 1);
+  --app-transition-ms: 520ms;
 }
 
 /* Prioritize horizontal drag for native sliders; App.tsx also skips panel swipe if touch starts on range */
@@ -214,7 +218,21 @@ input[type="range"] {
   }
 
   .control-panel .control-hint {
-    font-size: 1.04em;
+    /* Inherit from .control-panel (1.35rem+), not 1rem util classes, so we keep relative to panel body. */
+    font-size: 1.12em;
+  }
+
+  .control-panel .control-hint.library-hint-blox {
+    /* Fluid size from hint column (container) width + em bounds */
+    font-size: clamp(0.92em, 0.12em + 1.2cqi, 1.22em);
+    line-height: 1.42;
+    letter-spacing: 0.01em;
+  }
+
+  @supports not (width: 1cqi) {
+    .control-panel .control-hint.library-hint-blox {
+      font-size: clamp(0.92em, 0.15em + 0.65vw, 1.22em);
+    }
   }
 
   .control-panel .control-hint :where(.control-code),

@@ -13,7 +13,7 @@ export interface PlaymatBackgroundDef {
 
 export const PLAYMAT_BACKGROUNDS: PlaymatBackgroundDef[] = [
   { id: '2026_final', label: '2026 Final', src: final },
-  { id: 'dark_rog', label: 'Dark (ROG)', src: darkRog },
+  { id: 'dark_rog', label: 'Dark ROG', src: darkRog },
   { id: 'light_blue', label: 'Light Blue', src: lightBlue },
   { id: 'dark_red', label: 'Dark Red', src: darkRed },
   { id: 'light_yellow', label: 'Light Yellow', src: lightYellow },

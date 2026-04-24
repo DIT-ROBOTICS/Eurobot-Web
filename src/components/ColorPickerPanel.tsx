@@ -108,7 +108,7 @@ function rgbToHsl(r: number, g: number, b: number): { h: number; s: number; l: n
 
 function rgbToHex({ r, g, b }: Rgb): string {
   const t = (n: number) => n.toString(16).padStart(2, "0");
-  return `#${t(r)}${t(g)}${t(b)}`.toLowerCase();
+  return `#${t(r)}${t(g)}${t(b)}`.toUpperCase();
 }
 
 function colorToDisplay(rgb: Rgb, mode: "hex" | "rgb" | "hsl"): string {
@@ -149,9 +149,9 @@ function CopyIcon({ className }: { className?: string }) {
   );
 }
 
-/** Random + Apply: identical geometry and typography. */
+/** Random + Apply: match Control / Manual control button copy scale (see manualButtonClasses). */
 const PICKER_ACTION =
-  "inline-flex h-16 min-h-16 w-full min-w-0 min-[400px]:flex-1 items-center justify-center rounded-xl text-lg font-semibold sm:text-xl " +
+  "inline-flex h-16 min-h-16 w-full min-w-0 min-[400px]:flex-1 items-center justify-center rounded-xl text-lg font-bold tracking-wider sm:text-2xl " +
   MANUAL_CTRL_BTN_BASE;
 
 export function ColorPickerPanel({ value, onHexChange, onApply, fallbackHex }: Props) {
@@ -331,7 +331,7 @@ export function ColorPickerPanel({ value, onHexChange, onApply, fallbackHex }: P
   };
 
   return (
-    <div className="w-full min-w-0 max-w-xl rounded-[10px] border border-white/12 bg-[#121212] p-3.5 text-[1.02em] shadow-lg sm:rounded-[12px] sm:p-4">
+    <div className="w-full min-w-0 max-w-full rounded-[10px] border border-white/12 bg-[#121212] p-3.5 text-[1.02em] shadow-lg sm:rounded-[12px] sm:p-4">
       <div
         ref={svRef}
         className="relative h-40 w-full cursor-crosshair select-none touch-none overflow-hidden rounded-[10px] sm:h-44"
@@ -392,7 +392,7 @@ export function ColorPickerPanel({ value, onHexChange, onApply, fallbackHex }: P
             autoComplete="off"
             spellCheck={false}
             aria-label="Color value"
-            placeholder="#e64545"
+            placeholder="#E64545"
           />
         </div>
         <div className="flex shrink-0">
@@ -406,7 +406,7 @@ export function ColorPickerPanel({ value, onHexChange, onApply, fallbackHex }: P
             <CopyIcon className="h-7 w-7 sm:h-8 sm:w-8" />
           </button>
         </div>
-        <div className="flex h-full min-w-[5.75rem] shrink-0 self-stretch border-l border-white/10 sm:min-w-[6.75rem]">
+        <div className="flex h-full min-w-[6.5rem] shrink-0 self-stretch border-l border-white/10 sm:min-w-[7.5rem]">
           <Popover.Root open={formatOpen} onOpenChange={setFormatOpen}>
             <Popover.Trigger asChild>
               <button
@@ -414,11 +414,11 @@ export function ColorPickerPanel({ value, onHexChange, onApply, fallbackHex }: P
                 id={formatTriggerId}
                 className={clsx(
                   "group flex h-full w-full min-w-0 items-center justify-between gap-1.5 rounded-r-[0.5rem] border-0 pl-2.5 pr-2",
-                  "bg-zinc-900/35 text-left text-sm font-medium text-zinc-300",
+                  "bg-zinc-900/35 text-left text-base font-semibold text-zinc-200",
                   "outline-none transition-colors",
                   "hover:bg-white/[0.07] hover:text-white",
                   "focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[color-mix(in_srgb,var(--theme-accent)_50%,transparent)]",
-                  "sm:pl-3.5 sm:pr-2.5 sm:text-base"
+                  "sm:pl-3.5 sm:pr-2.5 sm:text-lg"
                 )}
                 aria-haspopup="listbox"
                 aria-expanded={formatOpen}
@@ -429,7 +429,7 @@ export function ColorPickerPanel({ value, onHexChange, onApply, fallbackHex }: P
                 </span>
                 <ChevronDown
                   className={clsx(
-                    "h-4 w-4 shrink-0 text-zinc-500 transition-transform duration-200 group-hover:text-zinc-300",
+                    "h-5 w-5 shrink-0 text-zinc-500 transition-transform duration-200 group-hover:text-zinc-300",
                     formatOpen && "rotate-180"
                   )}
                   strokeWidth={2.25}
@@ -456,7 +456,7 @@ export function ColorPickerPanel({ value, onHexChange, onApply, fallbackHex }: P
                         role="option"
                         aria-selected={selected}
                         className={clsx(
-                          "flex w-full items-center justify-between gap-2 rounded-lg px-3 py-2.5 text-left text-sm font-medium transition sm:text-base",
+                          "flex w-full items-center justify-between gap-2 rounded-lg px-3 py-2.5 text-left text-base font-semibold transition sm:text-lg",
                           selected
                             ? "text-white"
                             : "text-zinc-400 hover:bg-white/[0.06] hover:text-zinc-100"
