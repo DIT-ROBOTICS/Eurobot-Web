@@ -27,6 +27,8 @@ if (!fs.existsSync(dataDir)) {
 const rivalParamsPath = path.join(dataDir, 'rival_params.yaml');
 const buttonStatesPath = path.join(dataDir, 'button.json');
 const simaJSONPath = path.join(dataDir, 'sima.json');
+const missionSequencePath = path.join(dataDir, 'mission_sequence.json');
+const missionSequenceLegacyPath = path.join(dataDir, 'mission_sequence_black.json');
 
 // Set navigation parameter file paths
 const navProfiles = {
@@ -680,41 +682,120 @@ router.post('/sima-params', (req, res) => {
   }
 });
 
-// GET endpoint to retrieve button states
+function defaultButtonStates18() {
+  return Object.fromEntries([...Array(18).keys()].map((num) => [String(num), false]));
+}
+
+/** Splits the playmat tap order: same order as in `sequence`, pantry 0-9 and collection 10-17. */
+function missionFromFlatSequence(flat) {
+  if (!Array.isArray(flat)) {
+    return { pantry_sequence: [], collection_sequence: [] };
+  }
+  const pantry_sequence = [];
+  const collection_sequence = [];
+  for (const m of flat) {
+    const n = Number(m);
+    if (!Number.isInteger(n)) continue;
+    if (n >= 0 && n <= 9) pantry_sequence.push(n);
+    else if (n >= 10 && n <= 17) collection_sequence.push(n);
+  }
+  return { pantry_sequence, collection_sequence };
+}
+
+/**
+ * One document: playmat { states, sequence } with derived pantry/collection in the same file.
+ * Legacy: mission_sequence.json is merged once when button.json is missing.
+ */
+function readButtonDocument() {
+  if (!fs.existsSync(buttonStatesPath)) {
+    if (fs.existsSync(missionSequencePath) || fs.existsSync(missionSequenceLegacyPath)) {
+      const p = fs.existsSync(missionSequencePath) ? missionSequencePath : missionSequenceLegacyPath;
+      try {
+        const raw = JSON.parse(fs.readFileSync(p, 'utf8'));
+        const st = defaultButtonStates18();
+        const doc = {
+          states: st,
+          sequence: [],
+          pantry_sequence: Array.isArray(raw.pantry_sequence) ? raw.pantry_sequence.map(Number) : [],
+          collection_sequence: Array.isArray(raw.collection_sequence) ? raw.collection_sequence.map(Number) : [],
+        };
+        const dir = path.dirname(buttonStatesPath);
+        if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+        fs.writeFileSync(buttonStatesPath, JSON.stringify(doc, null, 2), 'utf8');
+        console.log('Migrated mission_sequence into button.json');
+        return doc;
+      } catch (e) {
+        console.error('Mission migration to button.json failed', e);
+      }
+    }
+    return {
+      states: defaultButtonStates18(),
+      sequence: [],
+      pantry_sequence: [],
+      collection_sequence: [],
+    };
+  }
+  const data = JSON.parse(fs.readFileSync(buttonStatesPath, 'utf8'));
+  const states = data.states && typeof data.states === 'object' && !Array.isArray(data.states) ? data.states : defaultButtonStates18();
+  const sequence = Array.isArray(data.sequence) ? data.sequence : [];
+  const derived = missionFromFlatSequence(sequence);
+  return {
+    states,
+    sequence,
+    pantry_sequence: Array.isArray(data.pantry_sequence) ? data.pantry_sequence.map(Number) : derived.pantry_sequence,
+    collection_sequence: Array.isArray(data.collection_sequence) ? data.collection_sequence.map(Number) : derived.collection_sequence,
+  };
+}
+
+function writeButtonDocumentFromPlaymat(states, sequence) {
+  const dir = path.dirname(buttonStatesPath);
+  if (!fs.existsSync(dir)) {
+    fs.mkdirSync(dir, { recursive: true });
+  }
+  const m = missionFromFlatSequence(Array.isArray(sequence) ? sequence : []);
+  const doc = { states, sequence: Array.isArray(sequence) ? sequence : [], ...m };
+  fs.writeFileSync(buttonStatesPath, JSON.stringify(doc, null, 2), 'utf8');
+  return doc;
+}
+
+/**
+ * If playmat sequence is empty, prefer stored mission (migration or manual); else derive from sequence.
+ */
+function missionForApiResponse(doc) {
+  if (Array.isArray(doc.sequence) && doc.sequence.length > 0) {
+    return missionFromFlatSequence(doc.sequence);
+  }
+  return {
+    pantry_sequence: Array.isArray(doc.pantry_sequence) ? doc.pantry_sequence : [],
+    collection_sequence: Array.isArray(doc.collection_sequence) ? doc.collection_sequence : [],
+  };
+}
+
+// GET endpoint to retrieve button states (includes mission in button.json; mission derived from sequence when non-empty)
 router.get('/button-states', (req, res) => {
   try {
     console.log('Button states API called');
-    
-    // Check if file exists
-    if (!fs.existsSync(buttonStatesPath)) {
-      console.log('Button states file does not exist, returning default states');
-      // Return default (all false) button states and empty sequence if file doesn't exist
-      const defaultStates = Object.fromEntries([...Array(20).keys()].map(num => [num, false]));
-      return res.json({ success: true, states: defaultStates, sequence: [] });
-    }
+    const doc = readButtonDocument();
+    const m = missionForApiResponse(doc);
+    console.log('Button document loaded:', buttonStatesPath);
 
-    // Read and parse the JSON file
-    console.log('Reading button states from:', buttonStatesPath);
-    const fileContent = fs.readFileSync(buttonStatesPath, 'utf8');
-    const data = JSON.parse(fileContent);
-    console.log('Button states loaded:', data);
-
-    res.json({ 
-      success: true, 
-      states: data.states || data, // For backward compatibility
-      sequence: data.sequence || [] 
+    res.json({
+      success: true,
+      states: doc.states,
+      sequence: doc.sequence,
+      ...m,
     });
   } catch (error) {
     console.error('Error reading button states:', error);
-    res.status(500).json({ 
-      success: false, 
+    res.status(500).json({
+      success: false,
       message: 'Error reading button states file',
-      error: error.message
+      error: error.message,
     });
   }
 });
 
-// POST endpoint to update button states
+// POST endpoint: updates states + sequence; overwrites mission fields from derived flat sequence
 router.post('/button-states', (req, res) => {
   try {
     console.log('Update button states API called with:', req.body);
@@ -722,43 +803,174 @@ router.post('/button-states', (req, res) => {
 
     if (!states || typeof states !== 'object') {
       console.error('Invalid button states provided:', states);
-      return res.status(400).json({ 
-        success: false, 
-        message: 'Invalid button states'
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid button states',
       });
     }
 
-    // Ensure the directory exists
-    const dir = path.dirname(buttonStatesPath);
-    console.log('Checking directory:', dir);
-    if (!fs.existsSync(dir)) {
-      console.log('Directory does not exist, creating it');
-      fs.mkdirSync(dir, { recursive: true });
-    }
+    const out = writeButtonDocumentFromPlaymat(states, sequence);
+    console.log('Button document updated (includes pantry/collection in same file)');
 
-    // Write both states and sequence to the file
-    console.log('Writing button states and sequence to file:', buttonStatesPath);
-    fs.writeFileSync(buttonStatesPath, JSON.stringify({ 
-      states, 
-      sequence: sequence || [] 
-    }, null, 2));
-    console.log('Button states and sequence updated successfully');
-
-    res.json({ 
-      success: true, 
-      message: 'Button states and sequence updated successfully'
+    res.json({
+      success: true,
+      message: 'Button states and sequence updated successfully',
+      pantry_sequence: out.pantry_sequence,
+      collection_sequence: out.collection_sequence,
     });
   } catch (error) {
     console.error('Error updating button states:', error);
-    res.status(500).json({ 
-      success: false, 
+    res.status(500).json({
+      success: false,
       message: 'Error updating button states file',
-      error: error.message
+      error: error.message,
     });
   }
 });
 
-// POST endpoint to reset all parameters to default values
+// --- robot_config (data dir; legacy _black filename still read on GET) ---
+const robotConfigPath = path.join(dataDir, 'robot_config.yaml');
+const robotConfigLegacyPath = path.join(dataDir, 'robot_config_black.yaml');
+
+const ROBOT_CONFIG_PARAM_KEYS = [
+  'pantry_aggressiveness',
+  'pantry_sensitivity',
+  'pantry_rival_sigma',
+  'pantry_rival_distance_threshold',
+  'collection_aggressiveness',
+  'collection_sensitivity',
+  'collection_rival_sigma',
+  'collection_rival_distance_threshold',
+  'flip_distance_threshold',
+  'cursor_tolerance',
+];
+
+function getDefaultRobotConfigDoc() {
+  return {
+    '/**': {
+      ros__parameters: {
+        // Aligned with DEFAULT_ROBOT_CONFIG in src/utils/robotConfigFields.ts
+        pantry_aggressiveness: 0.0,
+        pantry_sensitivity: 2.0,
+        pantry_rival_sigma: 0.3,
+        pantry_rival_distance_threshold: 0.3,
+        collection_aggressiveness: 0.0,
+        collection_sensitivity: 2.0,
+        collection_rival_sigma: 0.3,
+        collection_rival_distance_threshold: 0.3,
+        flip_distance_threshold: 0.1,
+        cursor_tolerance: 0.18,
+      },
+    },
+  };
+}
+
+function loadRobotConfigYaml() {
+  if (fs.existsSync(robotConfigPath)) {
+    return yaml.load(fs.readFileSync(robotConfigPath, 'utf8'));
+  }
+  if (fs.existsSync(robotConfigLegacyPath)) {
+    return yaml.load(fs.readFileSync(robotConfigLegacyPath, 'utf8'));
+  }
+  return getDefaultRobotConfigDoc();
+}
+
+function getRosParamsFromDoc(doc) {
+  if (!doc || typeof doc !== 'object') return {};
+  const k = Object.keys(doc).find((x) => doc[x] && typeof doc[x] === 'object' && doc[x].ros__parameters);
+  if (!k) return {};
+  return doc[k].ros__parameters && typeof doc[k].ros__parameters === 'object'
+    ? { ...doc[k].ros__parameters }
+    : {};
+}
+
+router.get('/robot-config', (req, res) => {
+  try {
+    const doc = loadRobotConfigYaml();
+    const rp = getRosParamsFromDoc(doc);
+    const params = {};
+    for (const key of ROBOT_CONFIG_PARAM_KEYS) {
+      if (rp[key] !== undefined && rp[key] !== null) params[key] = rp[key];
+    }
+    res.json({ success: true, params });
+  } catch (e) {
+    console.error('robot-config GET', e);
+    res.status(500).json({ success: false, message: String(e.message) });
+  }
+});
+
+router.post('/robot-config', (req, res) => {
+  try {
+    const doc = loadRobotConfigYaml();
+    const k = Object.keys(doc).find(
+      (x) => doc[x] && typeof doc[x] === 'object' && doc[x].ros__parameters !== undefined
+    );
+    if (!k) {
+      return res.status(500).json({ success: false, message: 'Invalid YAML shape' });
+    }
+    if (!doc[k].ros__parameters) doc[k].ros__parameters = {};
+    for (const key of ROBOT_CONFIG_PARAM_KEYS) {
+      if (req.body[key] === undefined) continue;
+      const v = req.body[key];
+      if (typeof v === 'number' && !Number.isNaN(v)) {
+        doc[k].ros__parameters[key] = v;
+      }
+    }
+    delete doc[k].ros__parameters.robot_name;
+    let out = yaml.dump(doc, yamlOptions);
+    out = out.replace(
+      /(pantry_rival_distance_threshold|collection_rival_distance_threshold|flip_distance_threshold|cursor_tolerance|pantry_rival_sigma|collection_rival_sigma|pantry_sensitivity|collection_sensitivity): (\d+)$/gm,
+      '$1: $2.0'
+    );
+    const dir = path.dirname(robotConfigPath);
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(robotConfigPath, out);
+    res.json({ success: true, message: 'robot_config.yaml updated' });
+  } catch (e) {
+    console.error('robot-config POST', e);
+    res.status(500).json({ success: false, message: String(e.message) });
+  }
+});
+
+router.get('/mission-sequence', (req, res) => {
+  try {
+    if (!fs.existsSync(buttonStatesPath) && !fs.existsSync(missionSequencePath) && !fs.existsSync(missionSequenceLegacyPath)) {
+      return res.json({ success: true, pantry_sequence: [], collection_sequence: [] });
+    }
+    const doc = readButtonDocument();
+    const m = missionForApiResponse(doc);
+    res.json({ success: true, ...m });
+  } catch (e) {
+    console.error('mission-sequence GET', e);
+    res.status(500).json({ success: false, message: String(e.message) });
+  }
+});
+
+/** Same data as in button.json; if playmat sequence is non-empty, mission is derived from it. */
+router.post('/mission-sequence', (req, res) => {
+  try {
+    const { pantry_sequence, collection_sequence } = req.body || {};
+    const out = {
+      pantry_sequence: Array.isArray(pantry_sequence) ? pantry_sequence.map(Number) : [],
+      collection_sequence: Array.isArray(collection_sequence) ? collection_sequence.map(Number) : [],
+    };
+    const doc = readButtonDocument();
+    const next = {
+      ...doc,
+      pantry_sequence: out.pantry_sequence,
+      collection_sequence: out.collection_sequence,
+    };
+    const dir = path.dirname(buttonStatesPath);
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(buttonStatesPath, JSON.stringify(next, null, 2), 'utf8');
+    res.json({ success: true, message: 'mission stored in button.json', ...out });
+  } catch (e) {
+    console.error('mission-sequence POST', e);
+    res.status(500).json({ success: false, message: String(e.message) });
+  }
+});
+
+// POST: reset all parameters to defaults (rival, nav, SIMA, robot_config, mission) — after robot/mission paths exist
 router.post('/reset-to-defaults', (req, res) => {
   try {
     console.log('Reset all parameters to defaults API called');
@@ -804,13 +1016,13 @@ router.post('/reset-to-defaults', (req, res) => {
       };
       
       // Write YAML content to a string first
-      let yamlContent = yaml.dump(profileData, yamlOptions);
+      let profYaml = yaml.dump(profileData, yamlOptions);
       
       // Force decimal format for integers by replacing "x:" with "x.0:"
-      yamlContent = yamlContent.replace(/(max_angular_velocity|max_linear_velocity): (\d+)$/gm, '$1: $2.0');
+      profYaml = profYaml.replace(/(max_angular_velocity|max_linear_velocity): (\d+)$/gm, '$1: $2.0');
       
       // Now write the modified content to file
-      fs.writeFileSync(profilePath, yamlContent);
+      fs.writeFileSync(profilePath, profYaml);
       console.log(`Reset ${profile} navigation profile`);
     }
     
@@ -820,6 +1032,34 @@ router.post('/reset-to-defaults', (req, res) => {
       plan_code: DEFAULT_VALUES.sima_plan_code
     }, null, 2));
     console.log('Reset sima.json with sima_start_time and plan_code');
+    
+    // 4. Reset robot_config.yaml
+    const defaultRobotDoc = getDefaultRobotConfigDoc();
+    let outRobot = yaml.dump(defaultRobotDoc, yamlOptions);
+    outRobot = outRobot.replace(
+      /(pantry_rival_distance_threshold|collection_rival_distance_threshold|flip_distance_threshold|cursor_tolerance|pantry_rival_sigma|collection_rival_sigma|pantry_sensitivity|collection_sensitivity): (\d+)$/gm,
+      '$1: $2.0',
+    );
+    const rcDir = path.dirname(robotConfigPath);
+    if (!fs.existsSync(rcDir)) {
+      fs.mkdirSync(rcDir, { recursive: true });
+    }
+    fs.writeFileSync(robotConfigPath, outRobot, 'utf8');
+    console.log('Reset robot_config.yaml');
+    
+    // 5. Reset playmat + mission in button.json (mission derived from empty sequence)
+    const missionOut = { pantry_sequence: [], collection_sequence: [] };
+    writeButtonDocumentFromPlaymat(defaultButtonStates18(), []);
+    console.log('Reset button.json (states, sequence, pantry/collection)');
+    
+    // Defaults for response (and frontend state sync)
+    const defaultRc = {};
+    const rcp0 = getRosParamsFromDoc(getDefaultRobotConfigDoc());
+    for (const key of ROBOT_CONFIG_PARAM_KEYS) {
+      if (rcp0[key] !== undefined && rcp0[key] !== null) {
+        defaultRc[key] = rcp0[key];
+      }
+    }
     
     // Format values for response to ensure consistent decimal places
     const responseData = {
@@ -831,7 +1071,9 @@ router.post('/reset-to-defaults', (req, res) => {
         dock_rival_degree: DEFAULT_VALUES.dock_rival_degree,
         nav_profiles: {},
         sima_start_time: DEFAULT_VALUES.sima_start_time,
-        plan_code: DEFAULT_VALUES.sima_plan_code
+        plan_code: DEFAULT_VALUES.sima_plan_code,
+        robot_config: defaultRc,
+        mission: { pantry_sequence: missionOut.pantry_sequence, collection_sequence: missionOut.collection_sequence },
       }
     };
     

@@ -20,7 +20,7 @@ class ErrorBoundary extends React.Component<
   render() {
     if (this.state.hasError) {
       return (
-        <div className="text-[#ff4d4d] text-xl p-4 text-center">
+        <div className="text-theme-accent text-xl p-4 text-center">
           Unable to load 3D model
         </div>
       );
@@ -125,7 +125,7 @@ export default function ModelViewer({ modelPath }: { modelPath: string }) {
       
       {error && (
         <div className="absolute inset-0 bg-[#141414] bg-opacity-80 flex items-center justify-center">
-          <div className="text-[#ff4d4d] text-xl p-4 text-center">
+          <div className="text-theme-accent text-xl p-4 text-center">
             {error}
           </div>
         </div>

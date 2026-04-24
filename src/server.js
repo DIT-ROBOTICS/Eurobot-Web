@@ -133,7 +133,71 @@ function initializeDefaultFiles() {
       }
     }
   }
-  
+
+  // --- robot_config.yaml (aligned with API + frontend DEFAULT_ROBOT_CONFIG) ---
+  const robotConfigPath = path.join(dataDir, 'robot_config.yaml');
+  if (!fs.existsSync(robotConfigPath)) {
+    try {
+      const defaultRobotDoc = {
+        '/**': {
+          ros__parameters: {
+            pantry_aggressiveness: 0.0,
+            pantry_sensitivity: 2.0,
+            pantry_rival_sigma: 0.3,
+            pantry_rival_distance_threshold: 0.3,
+            collection_aggressiveness: 0.0,
+            collection_sensitivity: 2.0,
+            collection_rival_sigma: 0.3,
+            collection_rival_distance_threshold: 0.3,
+            flip_distance_threshold: 0.1,
+            cursor_tolerance: 0.18,
+          },
+        },
+      };
+      const yamlOptions = {
+        lineWidth: -1,
+        quotingType: '"',
+        forceQuotes: false,
+        styles: { '!!float': 'decimal' },
+      };
+      let out = yaml.dump(defaultRobotDoc, yamlOptions);
+      out = out.replace(
+        /(pantry_rival_distance_threshold|collection_rival_distance_threshold|flip_distance_threshold|cursor_tolerance|pantry_rival_sigma|collection_rival_sigma|pantry_sensitivity|collection_sensitivity): (\d+)$/gm,
+        '$1: $2.0',
+      );
+      fs.writeFileSync(robotConfigPath, out, 'utf8');
+      console.log('Created default robot_config.yaml');
+    } catch (error) {
+      console.error(`Error creating robot_config.yaml: ${error.message}`);
+    }
+  }
+
+  const buttonPath = path.join(dataDir, "button.json");
+  if (!fs.existsSync(buttonPath)) {
+    try {
+      const states = Object.fromEntries(
+        [...Array(18).keys()].map((n) => [String(n), false])
+      );
+      fs.writeFileSync(
+        buttonPath,
+        JSON.stringify(
+          {
+            states,
+            sequence: [],
+            pantry_sequence: [],
+            collection_sequence: [],
+          },
+          null,
+          2
+        ),
+        "utf8"
+      );
+      console.log("Created default button.json (playmat + mission in one file)");
+    } catch (error) {
+      console.error(`Error creating button.json: ${error.message}`);
+    }
+  }
+
   console.log("Default parameter files initialization complete");
 }
 

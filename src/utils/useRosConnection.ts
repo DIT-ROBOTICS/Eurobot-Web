@@ -25,9 +25,10 @@ export function useRosConnection() {
       return;
     }
 
-    // Get hostname from localStorage
-    const hostname = localStorage.getItem('bms-hostname') || "DIT-2026-10";
-    const hostNumber = hostname.split('-')[2] || "";
+    // bms-hostname (ESP daemon) is not used for the bridge URL; kept for other UI that reads it.
+    const hostname = localStorage.getItem("bms-hostname") || "DIT-2026-10";
+    const _hostNumber = hostname.split("-")[2] || "";
+    void _hostNumber;
     const rosUrl = `ws://localhost:9090`;
 
     let reconnectTimer: any = null;
@@ -178,10 +179,28 @@ export function useRosConnection() {
     });
   }, [connectionState.ros, connectionState.connected]);
 
+  /** Advertise and return a publisher Topic (caller must unadvertise/unsubscribe on cleanup) */
+  const createPublisher = useCallback(
+    (topicName: string, messageType: string) => {
+      if (typeof window === 'undefined' || !window.ROSLIB) return null;
+      if (!connectionState.ros || !connectionState.connected) return null;
+      const T = (window as any).ROSLIB.Topic;
+      const topic = new T({
+        ros: connectionState.ros,
+        name: topicName,
+        messageType,
+      });
+      topic.advertise();
+      return topic;
+    },
+    [connectionState.ros, connectionState.connected]
+  );
+
   return {
     ...connectionState,
     getTopicHandler,
     getServiceHandler,
-    getServiceServer
+    getServiceServer,
+    createPublisher,
   };
 } 

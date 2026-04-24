@@ -12,6 +12,7 @@
     "start": "npm run build && npm run server"
   },
   "dependencies": {
+    "@radix-ui/react-popover": "^1.1.6",
     "@radix-ui/react-progress": "^1.1.6",
     "@radix-ui/react-slot": "^1.2.2",
     "@react-three/drei": "^9.92.7",

@@ -5,21 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Robot 3D Model Viewer</title>
   <script type="module" src="/js/model-viewer.min.js"></script>
+  <script src="/js/robot-glb-standalone.js" defer></script>
   <style>
-    @font-face {
-      font-family: 'MStiffHeiHK';
-      src: url('/fonts/mstiffhei-hk-ultrabold.woff2') format('woff2');
-      font-weight: 100 900;
-      font-style: normal;
-      font-display: swap;
-    }
-
-    * {
-      margin: 0;
-      padding: 0;
-      box-sizing: border-box;
-    }
-
+    * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
       background-color: #0e0e0e;
       height: 100vh;
@@ -27,188 +15,117 @@
       overflow: hidden;
       position: relative;
     }
-
     model-viewer {
       width: 100%;
       height: 100%;
       background-color: #0e0e0e;
       --poster-color: #0e0e0e;
+      --progress-bar-color: var(--progress-accent, #e64545);
+      --camera-orbit-sensitivity: 0.85;
+      --interaction-prompt-threshold: 0;
+      --interaction-prompt: none;
+      --interaction-prompt-display: none;
     }
-
+    model-viewer::part(control-button) { min-width: 64px; min-height: 64px; }
+    model-viewer::part(default-icon-button) { min-width: 64px; min-height: 64px; }
     .back-button {
       position: absolute;
-      bottom: 30px;
+      bottom: 28px;
       left: 50%;
       transform: translateX(-50%);
-      background-color: #d32f2f;
-      width: 50px;
-      height: 50px;
-      border-radius: 6px;
+      min-width: 64px;
+      min-height: 64px;
+      width: 72px;
+      height: 72px;
+      border-radius: 10px;
       display: flex;
       align-items: center;
       justify-content: center;
-      box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
-      transition: all 0.2s ease;
       z-index: 100;
+      background: var(--progress-accent, #d32f2f);
     }
-
-    .back-button:hover {
-      background-color: #ff4d4d;
-      transform: translateX(-50%) translateY(-2px);
-      box-shadow: 0 6px 12px rgba(0, 0, 0, 0.4);
-    }
-
-    .back-icon {
-      width: 24px;
-      height: 24px;
-      fill: white;
-    }
-    
-    .loading-container {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      height: 100%;
-      width: 100%;
-      background-color: #0e0e0e;
-    }
-    
-    .loading-spinner {
-      width: 40px;
-      height: 40px;
-      border: 4px solid rgba(255, 77, 77, 0.3);
-      border-top: 4px solid #ff4d4d;
-      border-radius: 50%;
-      animation: spin 1s linear infinite;
-    }
-    
-    @keyframes spin {
-      0% { transform: rotate(0deg); }
-      100% { transform: rotate(360deg); }
-    }
-    
+    .back-button:hover { filter: brightness(1.1); }
     .model-nav {
       position: absolute;
-      top: 30px;
-      right: 30px;
+      top: 20px;
+      right: 20px;
       z-index: 100;
       display: flex;
-      gap: 12px;
-      align-items: center;
-      padding: 8px;
-      border-radius: 6px;
+      gap: 14px;
+      padding: 12px 16px;
+      background: rgba(0, 0, 0, 0.5);
+      border-radius: 10px;
     }
-    
     .nav-arrow {
-      width: 36px;
-      height: 36px;
-      border-radius: 4px;
-      background-color: transparent;
-      border: 1px solid rgba(255, 255, 255, 0.3);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      cursor: pointer;
-      transition: all 0.2s ease;
+      width: 64px; height: 64px; min-width: 64px; min-height: 64px;
+      border-radius: 10px; background: #2a2a2a; border: 2px solid #666;
+      display: flex; align-items: center; justify-content: center;
+      cursor: pointer; transition: all 0.2s;
     }
-    
-    .nav-arrow:hover {
-      background-color: rgba(255, 255, 255, 0.1);
-      border-color: #ff4d4d;
+    .nav-arrow:hover { background: #3a3a3a; }
+    .nav-arrow svg { width: 34px; height: 34px; fill: #e0e0e0; }
+    .loading-container {
+      display: flex; align-items: center; justify-content: center;
+      height: 100%; width: 100%; background: #0e0e0e;
     }
-    
-    .nav-arrow:active {
-      transform: scale(0.95);
+    .loading-spinner {
+      width: 40px; height: 40px;
+      border: 4px solid rgba(255, 77, 77, 0.3);
+      border-top: 4px solid var(--progress-accent, #e64545);
+      border-radius: 50%; animation: spin 1s linear infinite;
     }
-    
-    .nav-arrow svg {
-      width: 24px;
-      height: 24px;
-      fill: #e0e0e0;
-    }
+    @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
   </style>
 </head>
 <body>
   <div class="model-nav">
-    <div class="nav-arrow" id="prev-model">
-      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
-        <path d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z" fill="#e0e0e0"/>
-      </svg>
+    <div class="nav-arrow" id="prev-model" role="button" tabindex="0" aria-label="Previous model">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z"/></svg>
     </div>
-    <div class="nav-arrow" id="next-model">
-      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
-        <path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z" fill="#e0e0e0"/>
-      </svg>
+    <div class="nav-arrow" id="next-model" role="button" tabindex="0" aria-label="Next model">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/></svg>
     </div>
   </div>
-
   <model-viewer
     id="robot-model"
     alt="Robot 3D Model"
-    src="/assets/robot_model.glb"
+    interaction-prompt="none"
     camera-controls
-    auto-rotate
-    auto-rotate-delay="3000"
-    rotation-per-second="30deg"
-    shadow-intensity="0"
-    camera-orbit="45deg 60deg 0.5m"
-    min-camera-orbit="auto auto 0.8m"
-    max-camera-orbit="auto auto 1.5m"
-    scale="1.0 1.0 1.0"
-    exposure="1.0"
+    shadow-intensity="0.4"
+    camera-orbit="0deg 55deg 1.1m"
+    min-camera-orbit="auto 4deg 0.85m"
+    max-camera-orbit="auto 92deg 1.7m"
+    camera-target="0m 0.2m 0m"
+    field-of-view="28deg"
   >
-    <div slot="poster" class="loading-container">
-      <div class="loading-spinner"></div>
-    </div>
-    <div slot="error" class="loading-container">
-      <div class="loading-spinner"></div>
-    </div>
+    <div slot="poster" class="loading-container" aria-hidden="true"></div>
   </model-viewer>
-  
+  <script src="/js/cinematic-camera-orbit.js"></script>
   <a href="/" class="back-button" aria-label="Back to dashboard">
-    <svg class="back-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
-      <path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z" fill="white"/>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="36" height="36" fill="white">
+      <path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/>
     </svg>
   </a>
-  
   <script>
-    document.addEventListener('DOMContentLoaded', () => {
-      const modelViewer = document.getElementById('robot-model');
-      const prevBtn = document.getElementById('prev-model');
-      const nextBtn = document.getElementById('next-model');
-      
-      const models = [
-        '/assets/robot_model.glb',
-        '/assets/robot_model2.glb',
-        '/assets/robot_model3.glb'
-      ];
-      
-      // Load the last selected model index from localStorage or default to 0
-      let currentIndex = parseInt(localStorage.getItem('selectedRobotModelIndex') || '0');
-      
-      // Function to update the display
-      const updateDisplay = () => {
-        // Update model source
-        modelViewer.src = models[currentIndex];
-        
-        // Save to localStorage
-        localStorage.setItem('selectedRobotModelIndex', currentIndex.toString());
-      };
-      
-      // Event listeners for navigation buttons
-      prevBtn.addEventListener('click', () => {
-        currentIndex = (currentIndex - 1 + models.length) % models.length;
-        updateDisplay();
+    document.addEventListener("DOMContentLoaded", function () {
+      var theme = (function () {
+        try { return localStorage.getItem("eurobot-theme-accent") || "#e64545"; } catch (e) { return "#e64545"; }
+      })();
+      document.documentElement.style.setProperty("--progress-accent", theme);
+      var modelViewer = document.getElementById("robot-model");
+      var lastUrl = null;
+      if (!window.eurobotLoadGlbInViewer) {
+        return;
+      }
+      var h = window.eurobotLoadGlbInViewer(function (url) {
+        if (lastUrl) { try { URL.revokeObjectURL(lastUrl); } catch (e) {}
+        }
+        if (url) { modelViewer.src = url; lastUrl = url; } else { modelViewer.removeAttribute("src"); }
       });
-      
-      nextBtn.addEventListener('click', () => {
-        currentIndex = (currentIndex + 1) % models.length;
-        updateDisplay();
-      });
-      
-      // Initialize display
-      updateDisplay();
+      h.refresh();
+      document.getElementById("prev-model").addEventListener("click", function () { h.nav(-1); });
+      document.getElementById("next-model").addEventListener("click", function () { h.nav(1); });
     });
   </script>
 </body>
-</html> 
+</html>

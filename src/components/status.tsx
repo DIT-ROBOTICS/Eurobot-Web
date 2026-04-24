@@ -1,13 +1,21 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import { createPortal } from "react-dom";
+import { SponsorFullscreenOverlay } from "./SponsorFullscreenOverlay";
 import Status3DModel from "./Status3DModel";
 import { useRosConnection } from "../utils/useRosConnection";
-
-// Add type definitions
-interface SimaStatus {
-  id: string;
-  connected: boolean;
-  url: string;
-}
+import { parseSimaNamesFromStorage } from "../utils/simaNames";
+import {
+  listSponsors,
+  recordToObjectUrl,
+  type SponsorRecord,
+} from "../utils/sponsorIdb";
+import { StatusPanel } from "./StatusPanel";
+import { MANUAL_CTRL_ACCENT, MANUAL_CTRL_NEUTRAL } from "../utils/manualButtonClasses";
+import {
+  type RobotConfigFields,
+  DEFAULT_ROBOT_CONFIG,
+  RC_FIELD_GROUPS,
+} from "../utils/robotConfigFields";
 
 interface UpdateStatus {
   message: string;
@@ -15,42 +23,50 @@ interface UpdateStatus {
   visible: boolean;
 }
 
-// Define system group order and types
-const systemGroupOrder = ['MAIN', 'CAMERA', 'NAVIGATION', 'LOCALIZATION'] as const;
-type SystemGroupName = typeof systemGroupOrder[number];
+// System Status: driven only by /robot/startup/groups_state (order matches group indices 0–3)
+// Ready button: /robot/startup/ready_signal as btcpp StartUpSrv, one call per group 1–4 (state=1)
+const systemGroupOrder = ["MAIN", "VISION", "NAVIGATION", "LOCALIZATION"] as const;
 
 interface SystemGroupStatusState {
   MAIN: number | null;
-  CAMERA: number | null;
+  VISION: number | null;
   NAVIGATION: number | null;
   LOCALIZATION: number | null;
 }
 
+const STARTUP_SRV_TYPE = "btcpp_ros2_interfaces/srv/StartUpSrv";
+
+const SIMA_STALE_MS = 1300;
+const BATTERY_STALE_MS = 8000;
+
 export default function RobotDashboard() {
   const [batteryVoltage, setBatteryVoltage] = useState(20.25);
-  const [filteredVoltage, setFilteredVoltage] = useState(20.25); // Filtered voltage value
+  const [displayVoltage, setDisplayVoltage] = useState(20.25);
+  const lastBatteryMsgAtRef = useRef(0);
+  const hasReceivedBatteryRef = useRef(false);
   const [plugConnected, setPlugConnected] = useState(false); // Ready signal over plug interface
   const [lastPlugTrueTime, setLastPlugTrueTime] = useState(0); // Time when the last true plug signal was received
   const [isHalfScreen, setIsHalfScreen] = useState(false); // New state for half-screen mode
-  const [simaStatuses, setSimaStatuses] = useState([
-    { id: "01", connected: false, url: "http://dit-sima-01.local/" },
-    { id: "02", connected: false, url: "http://dit-sima-02.local/" },
-    { id: "03", connected: false, url: "http://dit-sima-03.local/" },
-    { id: "04", connected: false, url: "http://dit-sima-04.local/" },
-    { id: "05", connected: false, url: "http://dit-sima-05.local/" },
-    { id: "06", connected: false, url: "http://dit-sima-06.local/" },
-    { id: "07", connected: false, url: "http://dit-sima-07.local/" },
-    { id: "08", connected: false, url: "http://dit-sima-08.local/" },
-  ]);
-  const [isSettingOpen, setIsSettingOpen] = useState(false);
-  const [hostnameInput, setHostnameInput] = useState("");
+  const [simaNames, setSimaNames] = useState<string[]>(() => parseSimaNamesFromStorage());
+  const [simaOnline, setSimaOnline] = useState<Record<string, { ok: boolean; t: number }>>({});
+  const [simaRenderTick, setSimaRenderTick] = useState(0);
+  const [gameTimeVal, setGameTimeVal] = useState(0);
+  const [gameScore, setGameScore] = useState<number | null>(null);
+  const [sponsorRecords, setSponsorRecords] = useState<SponsorRecord[]>([]);
+  const [sponsorIndex, setSponsorIndex] = useState(0);
+  const [sponsorOverlayOpen, setSponsorOverlayOpen] = useState(false);
+  const [sponsorOpenOrigin, setSponsorOpenOrigin] = useState({ x: 0, y: 0 });
+  const [sponsorCloseExit, setSponsorCloseExit] = useState(false);
+  const sponsorPreviewRef = useRef<HTMLDivElement>(null);
   const [hostname, setHostname] = useState(() => {
-    // Get saved hostname from localStorage, use default if not found
-    const saved = localStorage.getItem('bms-hostname');
+    const saved = localStorage.getItem("bms-hostname");
     return saved || "DIT-2026-10";
   });
-  // Use the shared ROS connection hook
-  const { connected: rosConnected, getTopicHandler } = useRosConnection();
+  const { connected: rosConnected, getTopicHandler, getServiceHandler, createPublisher } = useRosConnection();
+  const plugPubRef = useRef<ReturnType<NonNullable<typeof createPublisher>> | null>(null);
+  const onTakePubRef = useRef<ReturnType<NonNullable<typeof createPublisher>> | null>(null);
+
+  const [robotConfig, setRobotConfig] = useState<RobotConfigFields>(DEFAULT_ROBOT_CONFIG);
   const [isVoltageAvailable, setIsVoltageAvailable] = useState(true);
   // Long press reload state
   const [pressTimer, setPressTimer] = useState<any>(null);
@@ -65,6 +81,12 @@ export default function RobotDashboard() {
   });
   const [rivalRadius, setRivalRadius] = useState(22); // Default rival radius in cm
   const [updateStatus, setUpdateStatus] = useState<UpdateStatus>({ message: '', isError: false, visible: false });
+  /** Shown only under Robot config long-press buttons (not the Robot Parameters block) */
+  const [robotConfigStatus, setRobotConfigStatus] = useState<UpdateStatus>({
+    message: "",
+    isError: false,
+    visible: false,
+  });
   const [dockRivalRadius, setDockRivalRadius] = useState(46); // Default dock rival radius in cm
   const [dockRivalDegree, setDockRivalDegree] = useState(120); // Default dock rival degree
   const [navLinearVelocity, setNavLinearVelocity] = useState(1.1); // Default linear velocity
@@ -81,7 +103,7 @@ export default function RobotDashboard() {
   // State for system group status
   const [systemGroupStatus, setSystemGroupStatus] = useState<SystemGroupStatusState>({
     MAIN: null,
-    CAMERA: null,
+    VISION: null,
     NAVIGATION: null,
     LOCALIZATION: null,
   });
@@ -90,9 +112,129 @@ export default function RobotDashboard() {
   // Define the type for device status
   type DeviceStatusType = typeof deviceStatus;
 
-  // Extract host number from hostname for connection URLs
-  const hostNumber = hostname.split('-')[2] || "";
+  // Extract host number from hostname for connection URLs (set from Control Panel)
+  const hostNumber = hostname.split("-")[2] || "";
   const bmsUrl = `http://dit-2026-${hostNumber}-esp.local/`;
+
+  const refreshSponsors = useCallback(async () => {
+    const list = await listSponsors();
+    setSponsorRecords(list);
+  }, []);
+
+  useEffect(() => {
+    void refreshSponsors();
+    const onS = () => {
+      void refreshSponsors();
+    };
+    window.addEventListener("eurobot-sponsor-updated", onS);
+    return () => {
+      window.removeEventListener("eurobot-sponsor-updated", onS);
+    };
+  }, [refreshSponsors]);
+
+  useEffect(() => {
+    if (sponsorRecords.length === 0) return;
+    const t = setInterval(
+      () => setSponsorIndex((i) => (i + 1) % sponsorRecords.length),
+      4000
+    );
+    return () => clearInterval(t);
+  }, [sponsorRecords.length]);
+
+  const sponsorPreviewRec =
+    sponsorRecords.length > 0
+      ? sponsorRecords[sponsorIndex % sponsorRecords.length]
+      : undefined;
+  const sponsorPreviewSrc = useMemo(() => {
+    if (!sponsorPreviewRec) return "";
+    return recordToObjectUrl(sponsorPreviewRec);
+  }, [sponsorIndex, sponsorPreviewRec]);
+
+  useEffect(() => {
+    return () => {
+      if (sponsorPreviewSrc?.startsWith("blob:")) {
+        try {
+          URL.revokeObjectURL(sponsorPreviewSrc);
+        } catch {
+          /* */
+        }
+      }
+    };
+  }, [sponsorPreviewSrc]);
+
+  useEffect(() => {
+    fetch("/api/robot-config")
+      .then((r) => r.json())
+      .then((d) => {
+        if (d?.success && d?.params) {
+          setRobotConfig((prev: RobotConfigFields) => ({ ...prev, ...d.params }));
+        }
+      })
+      .catch(() => undefined);
+  }, []);
+
+  useEffect(() => {
+    if (!rosConnected) {
+      if (plugPubRef.current) {
+        try {
+          plugPubRef.current.unadvertise?.();
+        } catch {
+          /* */
+        }
+        plugPubRef.current = null;
+      }
+      if (onTakePubRef.current) {
+        try {
+          onTakePubRef.current.unadvertise?.();
+        } catch {
+          /* */
+        }
+        onTakePubRef.current = null;
+      }
+      return;
+    }
+    const p = createPublisher("/robot/startup/plug", "std_msgs/msg/Bool");
+    plugPubRef.current = p;
+    const t = createPublisher("/robot/on_take", "std_msgs/msg/Int16");
+    onTakePubRef.current = t;
+    return () => {
+      if (p)
+        try {
+          p.unadvertise?.();
+        } catch {
+          /* */
+        }
+      if (t)
+        try {
+          t.unadvertise?.();
+        } catch {
+          /* */
+        }
+    };
+  }, [rosConnected, createPublisher]);
+
+  useEffect(() => {
+    const onBms = () => {
+      setHostname(localStorage.getItem("bms-hostname") || "DIT-2026-10");
+    };
+    window.addEventListener("eurobot-bms-hostname", onBms);
+    window.addEventListener("storage", onBms);
+    return () => {
+      window.removeEventListener("eurobot-bms-hostname", onBms);
+      window.removeEventListener("storage", onBms);
+    };
+  }, []);
+
+  useEffect(() => {
+    const f = () => setSimaNames(parseSimaNamesFromStorage());
+    window.addEventListener("eurobot-sima-names-updated", f);
+    return () => window.removeEventListener("eurobot-sima-names-updated", f);
+  }, []);
+
+  useEffect(() => {
+    const i = setInterval(() => setSimaRenderTick((n) => n + 1), 400);
+    return () => clearInterval(i);
+  }, []);
 
   // Detect half-screen mode
   useEffect(() => {
@@ -133,14 +275,15 @@ export default function RobotDashboard() {
       return;
     }
 
-      // Subscribe to battery voltage topic
-    const batteryTopic = getTopicHandler('/robot_status/battery_voltage', 'std_msgs/msg/Float32');
+    const batteryTopic = getTopicHandler("/robot_status/battery_voltage", "std_msgs/msg/Float32");
     if (batteryTopic) {
       batteryTopic.subscribe((message: any) => {
         const voltage = parseFloat(message.data);
-        if (!isNaN(voltage)) {
-          setBatteryVoltage(parseFloat(voltage.toFixed(1)));
-        }
+        if (isNaN(voltage)) return;
+        lastBatteryMsgAtRef.current = Date.now();
+        hasReceivedBatteryRef.current = true;
+        setBatteryVoltage(parseFloat(voltage.toFixed(1)));
+        setIsVoltageAvailable(true);
       });
     }
 
@@ -183,23 +326,37 @@ export default function RobotDashboard() {
       });
       }
 
-    // Subscribe to system group status topic
-    const groupsStateTopic = getTopicHandler('/robot/startup/groups_state', 'std_msgs/msg/Int32MultiArray');
+    const groupsStateTopic = getTopicHandler("/robot/startup/groups_state", "std_msgs/msg/Int32MultiArray");
     if (groupsStateTopic) {
-      groupsStateTopic.subscribe((message: any) => { // message should be { data: number[] }
+      groupsStateTopic.subscribe((message: any) => {
         if (message.data && Array.isArray(message.data)) {
           const newStatusUpdate: Partial<SystemGroupStatusState> = {};
           systemGroupOrder.forEach((name, index) => {
             if (message.data.length > index) {
               newStatusUpdate[name] = message.data[index];
             } else {
-              // If data array is shorter than expected, mark missing as null
               newStatusUpdate[name] = null;
             }
           });
           setSystemGroupStatus((prevStatus: SystemGroupStatusState) => ({ ...prevStatus, ...newStatusUpdate }));
-          setLastGroupsStateUpdateTime(Date.now()); // Update timestamp
+          setLastGroupsStateUpdateTime(Date.now());
         }
+      });
+    }
+
+    const gameTimeTopic = getTopicHandler("/robot/startup/game_time", "std_msgs/msg/Float32");
+    if (gameTimeTopic) {
+      gameTimeTopic.subscribe((message: any) => {
+        const v = parseFloat(message.data);
+        if (!isNaN(v)) setGameTimeVal(v);
+      });
+    }
+
+    const gameScoreTopic = getTopicHandler("/game_score", "std_msgs/msg/Int32");
+    if (gameScoreTopic) {
+      gameScoreTopic.subscribe((message: any) => {
+        const s = parseInt(message.data, 10);
+        if (!isNaN(s)) setGameScore(s);
       });
     }
 
@@ -241,8 +398,48 @@ export default function RobotDashboard() {
           console.error("Error unsubscribing from groups state topic:", e);
         }
       }
+      if (gameTimeTopic) {
+        try {
+          gameTimeTopic.unsubscribe();
+        } catch (e) {
+          console.error("Error unsubscribing from game_time topic:", e);
+        }
+      }
+      if (gameScoreTopic) {
+        try {
+          gameScoreTopic.unsubscribe();
+        } catch (e) {
+          console.error("Error unsubscribing from game_score topic:", e);
+        }
+      }
     };
   }, [rosConnected, getTopicHandler]);
+
+  useEffect(() => {
+    if (!rosConnected || typeof window === "undefined" || !window.ROSLIB) {
+      setSimaOnline({});
+      return;
+    }
+    const parts: { name: string; t: { unsubscribe: () => void } }[] = [];
+    simaNames.forEach((name) => {
+      const t = getTopicHandler(`/${name}/status`, "std_msgs/msg/Bool");
+      if (t) {
+        t.subscribe((m: { data: boolean }) => {
+          setSimaOnline((o) => ({ ...o, [name]: { ok: m.data === true, t: Date.now() } }));
+        });
+        parts.push({ name, t });
+      }
+    });
+    return () => {
+      parts.forEach(({ t }) => {
+        try {
+          t.unsubscribe();
+        } catch {
+          /* */
+        }
+      });
+    };
+  }, [rosConnected, getTopicHandler, simaNames.join("|")]);
 
   // Add a timeout effect to reset plugConnected to false if no true signal received for 5 seconds
   useEffect(() => {
@@ -264,78 +461,37 @@ export default function RobotDashboard() {
     return () => clearInterval(intervalId);
   }, [plugConnected, lastPlugTrueTime]);
 
-  // Fallback: handle disconnected state
   useEffect(() => {
-    // When connection status changes
     if (rosConnected) {
-      setIsVoltageAvailable(true);
-    } else {
-      // When disconnected, immediately reset all voltage values to zero
-      setIsVoltageAvailable(false);
-      setBatteryVoltage(0);
-      setFilteredVoltage(0); // Immediately reset filtered voltage as well
-    }
-  }, [rosConnected]);
-
-  // Apply low-pass filter to stabilize voltage readings (reduce jitter)
-  useEffect(() => {
-    // Skip filtering if voltage not available or zero
-    if (!isVoltageAvailable || batteryVoltage === 0) {
       return;
     }
-    
-    // Low-pass filter - alpha determines how much new readings affect the filtered value
-    // Lower alpha means more smoothing but slower response to real changes
-    const alpha = 0.5;
-    setFilteredVoltage((prev: number) => {
-      return parseFloat((prev * (1 - alpha) + batteryVoltage * alpha).toFixed(1));
-    });
+    setIsVoltageAvailable(false);
+    hasReceivedBatteryRef.current = false;
+    setBatteryVoltage(0);
+    setDisplayVoltage(0);
+  }, [rosConnected]);
+
+  useEffect(() => {
+    if (!isVoltageAvailable || !hasReceivedBatteryRef.current) return;
+    const alpha = 0.42;
+    setDisplayVoltage((prev) => parseFloat((prev * (1 - alpha) + batteryVoltage * alpha).toFixed(2)));
   }, [batteryVoltage, isVoltageAvailable]);
 
-  // Add monitoring for battery topic specific disconnections
   useEffect(() => {
     if (!rosConnected) return;
-    
-    // Create a reference for the last time we received data
-    let lastUpdateTime = Date.now();
-    
-    // This function will be called whenever new battery data is received
-    const updateTimestamp = () => {
-      lastUpdateTime = Date.now();
-      // Make sure voltage is marked as available when we get updates
-      setIsVoltageAvailable(true);
-    };
-    
-    // Set up an observer to watch battery voltage changes
-    const batteryObserver = () => {
-      // Only update timestamp if we have a positive voltage and are connected
-      if (batteryVoltage > 0) {
-        updateTimestamp();
-      }
-    };
-    
-    // Call observer when battery voltage changes
-    batteryObserver();
-    
-    // Check periodically if we're still receiving updates
-    const checkInterval = setInterval(() => {
-      if (!rosConnected) return;
-      
-      const timeSinceLastUpdate = Date.now() - lastUpdateTime;
-      // If no updates for 8 seconds (more tolerant), consider battery data unavailable
-      if (timeSinceLastUpdate > 8000) {
+    const id = setInterval(() => {
+      if (!hasReceivedBatteryRef.current) return;
+      if (Date.now() - lastBatteryMsgAtRef.current > BATTERY_STALE_MS) {
         setIsVoltageAvailable(false);
       }
-    }, 5000);
-    
-    return () => clearInterval(checkInterval);
-  }, [batteryVoltage, rosConnected]);
+    }, 2000);
+    return () => clearInterval(id);
+  }, [rosConnected]);
 
   // Calculate battery percentage based on voltage (15V-21V range)
   const getBatteryPercentage = () => {
     if (!isVoltageAvailable) return 0;
-    
-    const percentage = ((filteredVoltage - 15) / (21 - 15)) * 100;
+    const percentage = ((displayVoltage - 15) / (21 - 15)) * 100;
     return Math.max(0, Math.min(100, Math.round(percentage)));
   };
 
@@ -349,67 +505,12 @@ export default function RobotDashboard() {
     return "#d64045";
   };
 
-  // Save hostname to localStorage
-  const saveHostname = () => {
-    if (hostnameInput.trim()) {
-      const newHostname = hostnameInput.trim();
-      setHostname(newHostname);
-      localStorage.setItem('bms-hostname', newHostname);
-      setIsSettingOpen(false);
-      setHostnameInput("");
-    }
+  const isSimaNameOnline = (name: string) => {
+    if (!rosConnected) return false;
+    const s = simaOnline[name];
+    if (!s) return false;
+    return s.ok && Date.now() - s.t < SIMA_STALE_MS;
   };
-
-  // Check SIMA connectivity
-  useEffect(() => {
-    // Function to check a single SIMA device connectivity
-    const checkSimaConnectivity = async (simaUrl: string) => {
-      try {
-        // Use fetch with a timeout to check connectivity
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 2000); // 2 second timeout
-        
-        const response = await fetch(simaUrl, { 
-          method: 'HEAD',
-          mode: 'no-cors', // This allows us to ping the URL without CORS issues
-          signal: controller.signal 
-        });
-        
-        clearTimeout(timeoutId);
-        return true; // If we get here, the connection succeeded
-      } catch (error) {
-        return false; // Connection failed
-      }
-    };
-
-    // Check all SIMA devices simultaneously
-    const checkAllSimas = async () => {
-      try {
-        // Create an array of promises for all SIMA checks
-        const checkPromises = simaStatuses.map((sima: SimaStatus) => 
-          checkSimaConnectivity(sima.url)
-            .then(isConnected => ({ ...sima, connected: isConnected }))
-        );
-        
-        // Wait for all promises to resolve in parallel
-        const results = await Promise.all(checkPromises);
-        
-        // Update state with all results at once
-        setSimaStatuses(results);
-      } catch (error) {
-        // Silent fail - no logging
-      }
-    };
-
-    // Initial check
-    checkAllSimas();
-    
-    // Set up periodic checks every 3 seconds
-    const intervalId = setInterval(checkAllSimas, 3000);
-    
-    // Clean up on unmount
-    return () => clearInterval(intervalId);
-  }, []);
 
   // Fetch current rival radius from backend on component mount
   useEffect(() => {
@@ -678,6 +779,63 @@ export default function RobotDashboard() {
     }
     setTimeout(() => setUpdateStatus((prev: UpdateStatus) => ({ ...prev, visible: false })), 3000); // Add type for prev
   };
+
+  const runRobotConfigSaveAfterLongPress = useCallback(async () => {
+    setButtonPressProgress(0);
+    setActiveButton(null);
+    setRobotConfigStatus({ message: "Saving robot config...", isError: false, visible: true });
+    try {
+      const res = await fetch("/api/robot-config", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(robotConfig),
+      });
+      if (!res.ok) throw new Error(`HTTP error ${res.status}`);
+      const data = await res.json();
+      if (!data.success) throw new Error(data.message || "Save failed");
+      setRobotConfigStatus({
+        message: "Robot config saved successfully",
+        isError: false,
+        visible: true,
+      });
+    } catch (e: unknown) {
+      setRobotConfigStatus({
+        message: `Error: ${e instanceof Error ? e.message : "Save failed"}`,
+        isError: true,
+        visible: true,
+      });
+    }
+    setTimeout(() => setRobotConfigStatus((prev) => ({ ...prev, visible: false })), 3000);
+  }, [robotConfig]);
+
+  const runRobotConfigResetAfterLongPress = useCallback(async () => {
+    setButtonPressProgress(0);
+    setActiveButton(null);
+    setRobotConfig({ ...DEFAULT_ROBOT_CONFIG });
+    setRobotConfigStatus({ message: "Resetting robot config to defaults...", isError: false, visible: true });
+    try {
+      const res = await fetch("/api/robot-config", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(DEFAULT_ROBOT_CONFIG),
+      });
+      if (!res.ok) throw new Error(`HTTP error ${res.status}`);
+      const data = await res.json();
+      if (!data.success) throw new Error(data.message || "Reset failed");
+      setRobotConfigStatus({
+        message: "Robot config reset to defaults",
+        isError: false,
+        visible: true,
+      });
+    } catch (e: unknown) {
+      setRobotConfigStatus({
+        message: `Error: ${e instanceof Error ? e.message : "Reset failed"}`,
+        isError: true,
+        visible: true,
+      });
+    }
+    setTimeout(() => setRobotConfigStatus((prev) => ({ ...prev, visible: false })), 3000);
+  }, []);
   
   // Update the startLongPress function to handle the new unified update
   const startLongPress = (buttonType: string) => {
@@ -691,9 +849,13 @@ export default function RobotDashboard() {
             handleUpdateAllParams(); // This should send all params
           } else if (buttonType === 'reset') {
             resetToDefaults();
+          } else if (buttonType === 'robotConfigSave') {
+            void runRobotConfigSaveAfterLongPress();
+          } else if (buttonType === 'robotConfigReset') {
+            void runRobotConfigResetAfterLongPress();
           } else {
             // For individual parameter updates (rival, dock, nav, sima)
-            updateParameters(buttonType); 
+            updateParameters(buttonType);
           }
           return 100;
         }
@@ -742,7 +904,9 @@ export default function RobotDashboard() {
         if (defaults.dock_rival_degree) setDockRivalDegree(defaults.dock_rival_degree);
         if (defaults.sima_start_time !== undefined) setSimaStartTime(defaults.sima_start_time);
         if (defaults.plan_code !== undefined) setPlanCode(defaults.plan_code); // Changed from sima_plan_code to plan_code
-        
+        if (defaults.robot_config && typeof defaults.robot_config === "object") {
+          setRobotConfig((prev) => ({ ...prev, ...defaults.robot_config } as RobotConfigFields));
+        }
         setUpdateStatus({ message: 'All parameters reset to defaults!', isError: false, visible: true });
         fetchNavParams(navProfile); // Reload nav params for current profile
       } else {
@@ -795,7 +959,7 @@ export default function RobotDashboard() {
       if (lastGroupsStateUpdateTime !== 0 && timeSinceLastUpdate > 5000) {
         setSystemGroupStatus({
           MAIN: null,
-          CAMERA: null,
+          VISION: null,
           NAVIGATION: null,
           LOCALIZATION: null,
         });
@@ -807,13 +971,127 @@ export default function RobotDashboard() {
     return () => clearInterval(intervalId);
   }, [rosConnected, lastGroupsStateUpdateTime]); // Removed systemGroupStatus from deps
 
+  const callGameReady = useCallback(() => {
+    // Four StartUpSrv calls (group 1–4, state=1) — same contract as Eurobot-2026-Main mock; does not change System Status locally.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const R = (window as any).ROSLIB;
+    if (!R) return;
+    const srv = getServiceHandler("/robot/startup/ready_signal", STARTUP_SRV_TYPE);
+    if (!srv) {
+      console.warn(
+        "ready_signal: StartUpSrv not available (check bridge / service type " + STARTUP_SRV_TYPE + ")"
+      );
+      return;
+    }
+    const callGroup = (i: number) => {
+      if (i >= 4) return;
+      const gid = i + 1;
+      const req = new R.ServiceRequest({ group: gid, state: 1 });
+      srv.callService(
+        req,
+        (res: { success?: boolean }) => {
+          if (!res?.success) {
+            console.warn("ready_signal: group", gid, "returned success=false");
+          }
+          callGroup(i + 1);
+        },
+        (err: Error) => {
+          console.error("ready_signal StartUpSrv", gid, err);
+          callGroup(i + 1);
+        }
+      );
+    };
+    callGroup(0);
+  }, [getServiceHandler]);
+
+  const sendGameStart = useCallback(() => {
+    const t = plugPubRef.current;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const R = (window as any).ROSLIB;
+    if (t && R) {
+      const M = R.Message;
+      t.publish(new M({ data: true }));
+    }
+  }, []);
+
+  const runTestOnTake = useCallback(() => {
+    const t = onTakePubRef.current;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const R = (window as any).ROSLIB;
+    if (!t || !R) return;
+    const M = R.Message;
+    [0, 1, 2, 3].forEach((n, i) => {
+      setTimeout(() => t.publish(new M({ data: n })), i * 400);
+    });
+  }, []);
+
+  const openSponsorFull = useCallback(() => {
+    const el = sponsorPreviewRef.current;
+    if (el) {
+      const r = el.getBoundingClientRect();
+      setSponsorOpenOrigin({ x: r.left + r.width / 2, y: r.top + r.height / 2 });
+    } else {
+      setSponsorOpenOrigin({ x: window.innerWidth / 2, y: window.innerHeight / 2 });
+    }
+    setSponsorCloseExit(false);
+    setSponsorOverlayOpen(true);
+  }, []);
+
+  const closeSponsorFull = useCallback(() => {
+    setSponsorCloseExit(true);
+    window.setTimeout(() => {
+      setSponsorOverlayOpen(false);
+      setSponsorCloseExit(false);
+    }, 280);
+  }, []);
+
+  useEffect(() => {
+    if (!sponsorOverlayOpen) return;
+    const k = (e: KeyboardEvent) => {
+      if (e.key === "Escape") closeSponsorFull();
+    };
+    window.addEventListener("keydown", k);
+    return () => window.removeEventListener("keydown", k);
+  }, [sponsorOverlayOpen, closeSponsorFull]);
+
+  useEffect(() => {
+    if (!sponsorOverlayOpen) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, [sponsorOverlayOpen]);
+
+  const gameTimeNum = Number.isFinite(gameTimeVal) ? gameTimeVal : 0;
+  const gameTimeInt = Math.min(100, Math.max(0, Math.round(gameTimeNum)));
+  const gameTimeProgress = Math.min(1, Math.max(0, gameTimeNum / 100));
+
+  const sponsorFullScreenOverlay =
+    sponsorOverlayOpen && sponsorRecords.length > 0 && typeof document !== "undefined"
+      ? createPortal(
+          <SponsorFullscreenOverlay
+            records={sponsorRecords}
+            onClose={closeSponsorFull}
+            openOrigin={sponsorOpenOrigin}
+            closeExit={sponsorCloseExit}
+          />,
+          document.body
+        )
+      : null;
+
   return (
-    <div className="h-full w-full bg-[#0e0e0e] p-6 overflow-y-auto">
+    <>
+      {sponsorFullScreenOverlay}
+
+    <div
+      className="h-full w-full min-h-0 overflow-y-auto overflow-x-hidden bg-[#0e0e0e] px-3 pt-[var(--app-chrome-pad-top)] pb-[var(--app-chrome-pad-bottom)] sm:px-5 lg:px-6 [overflow-anchor:none]"
+    >
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div className="space-y-6">
           {/* Status Indicators */}
           <StatusPanel title="System Status">
-            {systemGroupOrder.map(name => (
+            {systemGroupOrder.map((name) => (
               <StatusItem
                 key={name}
                 color={getSystemGroupColor(systemGroupStatus[name])}
@@ -830,7 +1108,157 @@ export default function RobotDashboard() {
             <CheckboxItem label="IMU" checked={deviceStatus.imu} />
             <CheckboxItem label="ESP32" checked={deviceStatus.esp32} />
           </StatusPanel>
-          
+
+          <StatusPanel title="Manual control">
+              <div className="grid w-full min-w-0 grid-cols-1 gap-3 sm:grid-cols-3 sm:gap-2">
+                <button
+                  type="button"
+                  disabled={!rosConnected}
+                  onClick={callGameReady}
+                  className={`${MANUAL_CTRL_NEUTRAL} disabled:cursor-not-allowed disabled:opacity-50`}
+                >
+                  Ready
+                </button>
+                <button
+                  type="button"
+                  disabled={!rosConnected}
+                  onClick={sendGameStart}
+                  className={`${MANUAL_CTRL_ACCENT} disabled:cursor-not-allowed disabled:opacity-50`}
+                  style={{ backgroundColor: "var(--theme-accent)" }}
+                >
+                  Start
+                </button>
+                <button
+                  type="button"
+                  disabled={!rosConnected}
+                  onClick={runTestOnTake}
+                  className={
+                    `${MANUAL_CTRL_NEUTRAL} min-h-0 py-3.5 text-base sm:px-3 sm:text-lg md:py-4 md:text-2xl ` +
+                    "disabled:cursor-not-allowed disabled:opacity-50"
+                  }
+                >
+                  HW Test
+                </button>
+            </div>
+          </StatusPanel>
+
+          <StatusPanel title="Robot config">
+            <div className="flex flex-col">
+              {RC_FIELD_GROUPS.map((group, groupIdx) => (
+                <React.Fragment key={group.title}>
+                  <h3
+                    className={`text-xl font-bold text-white ${
+                      groupIdx > 0 ? "mt-6" : ""
+                    }`}
+                  >
+                    {group.title}
+                  </h3>
+                  <div className="mt-4 flex min-w-0 flex-col space-y-4">
+                    {group.specs.map((spec) => {
+                    const raw = robotConfig[spec.key];
+                    const v = spec.integer ? Math.round(raw) : raw;
+                    const setVal = (n: number) => {
+                      const c = spec.integer
+                        ? Math.min(spec.max, Math.max(spec.min, Math.round(n)))
+                        : Math.min(spec.max, Math.max(spec.min, n));
+                      setRobotConfig((o) => ({ ...o, [spec.key]: c }));
+                    };
+                    const show =
+                      spec.integer
+                        ? String(Math.round(v))
+                        : (Math.round(v * 1000) / 1000).toString();
+                    return (
+                      <div key={spec.key} className="min-w-0">
+                        <div className="flex items-center justify-between">
+                          <div className="text-[#e0e0e0] text-xl">
+                            {spec.label}:
+                          </div>
+                          <div className="text-right text-white text-xl font-bold tabular-nums">
+                            {show}
+                          </div>
+                        </div>
+                        <div className="mt-4 flex flex-col space-y-2">
+                          <input
+                            type="range"
+                            min={spec.min}
+                            max={spec.max}
+                            step={spec.step}
+                            value={v}
+                            onChange={(e) => {
+                              const n = spec.integer
+                                ? Math.round(parseFloat(e.target.value))
+                                : parseFloat(e.target.value);
+                              setVal(n);
+                            }}
+                            className="h-3 w-full cursor-pointer appearance-none rounded-lg bg-[#333]"
+                            aria-label={`${group.title} ${spec.label}`}
+                          />
+                          <div className="flex justify-between text-sm text-[#999]">
+                            <span>{spec.min}</span>
+                            <span>{spec.max}</span>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                  </div>
+                </React.Fragment>
+              ))}
+            </div>
+            <div className="w-full max-w-2xl sm:max-w-none">
+              <button
+                type="button"
+                className="relative mt-8 block w-full overflow-hidden rounded-md px-5 py-4 text-center text-xl font-bold uppercase tracking-wider text-white transition-all duration-300"
+                style={{
+                  background:
+                    activeButton === "robotConfigSave" && buttonPressProgress > 0
+                      ? `linear-gradient(to right, #4caf50 ${buttonPressProgress}%, var(--theme-accent) ${buttonPressProgress}%)`
+                      : "var(--theme-accent)",
+                }}
+                onMouseDown={() => startLongPress("robotConfigSave")}
+                onMouseUp={cancelLongPress}
+                onMouseLeave={cancelLongPress}
+                onTouchStart={() => startLongPress("robotConfigSave")}
+                onTouchEnd={cancelLongPress}
+              >
+                SAVE ROBOT CONFIG
+              </button>
+              <button
+                type="button"
+                className="relative mt-2 block w-full overflow-hidden rounded-md px-5 py-4 text-center text-xl font-bold uppercase tracking-wider text-white transition-all duration-300"
+                style={{
+                  background:
+                    activeButton === "robotConfigReset" && buttonPressProgress > 0
+                      ? `linear-gradient(to right, #4caf50 ${buttonPressProgress}%, #333 ${buttonPressProgress}%)`
+                      : "#333",
+                }}
+                onMouseDown={() => startLongPress("robotConfigReset")}
+                onMouseUp={cancelLongPress}
+                onMouseLeave={cancelLongPress}
+                onTouchStart={() => startLongPress("robotConfigReset")}
+                onTouchEnd={cancelLongPress}
+              >
+                RESET TO DEFAULTS
+              </button>
+              {robotConfigStatus.visible && (
+                <div
+                  className={`mt-2 w-full text-center text-lg ${
+                    robotConfigStatus.isError
+                      ? "text-theme-accent"
+                      : "bg-[#0a2e0a] text-[#6bff6b]"
+                  } rounded-md py-2`}
+                  style={
+                    robotConfigStatus.isError
+                      ? { background: "color-mix(in srgb, var(--theme-accent) 14%, #1a0a0a)" }
+                      : undefined
+                  }
+                >
+                  {robotConfigStatus.message}
+                </div>
+              )}
+            </div>
+          </StatusPanel>
+
           {/* 3D Model */}
           <Status3DModel />
         </div>
@@ -857,30 +1285,128 @@ export default function RobotDashboard() {
               
               <div className="flex flex-col">
                 <div className="text-2xl font-bold text-white">Startup Signal</div>
-                <div className={`text-xl font-mono ${plugConnected ? 'text-[#ff4d4d]' : 'text-[#777]'}`}>
-                  {plugConnected ? 'READY' : 'STANDBY'}
+                <div
+                  className="text-xl font-mono"
+                  style={{ color: plugConnected ? "var(--theme-accent)" : "#777" }}
+                >
+                  {plugConnected ? "READY" : "STANDBY"}
                 </div>
               </div>
             </div>
           </StatusPanel>
+
+          <StatusPanel title="Game">
+            <div className="flex w-full min-w-0 flex-col gap-4 sm:flex-row">
+              <div className="flex min-h-[11rem] min-w-0 flex-1 flex-col items-center justify-center rounded-2xl border border-[#3a3a3a] bg-[#0f0f0f] px-4 py-6">
+                <div className="mb-2 text-lg font-semibold uppercase tracking-widest text-[#aaa] sm:text-xl">
+                  Score
+                </div>
+                <div
+                  className="text-7xl font-bold leading-none tabular-nums sm:text-8xl"
+                  style={{ color: "var(--theme-accent)" }}
+                >
+                  {gameScore === null ? "—" : gameScore}
+                </div>
+              </div>
+              <div
+                className="min-h-[11rem] min-w-0 flex-1 rounded-2xl p-1.5"
+                style={{
+                  background: `conic-gradient(from -90deg, var(--theme-accent) ${gameTimeProgress * 100}%, #2a2a2a 0)`,
+                }}
+                role="img"
+                aria-label={`Game time ${gameTimeInt} of 100 seconds`}
+              >
+                <div className="flex h-full min-h-[10.25rem] w-full flex-col items-center justify-center rounded-[0.8rem] border border-[#1f1f1f] bg-[#0f0f0f] px-4 py-5">
+                  <div className="mb-2 text-lg font-semibold uppercase tracking-widest text-[#aaa] sm:text-xl">
+                    Time
+                  </div>
+                  <div className="text-7xl font-bold leading-none tabular-nums text-white sm:text-8xl">
+                    {gameTimeInt}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </StatusPanel>
+
+          <StatusPanel
+            title="Sponsors"
+            headerAction={
+              sponsorRecords.length > 0 ? (
+                <button
+                  type="button"
+                  onClick={openSponsorFull}
+                  className="flex h-14 min-h-[44px] w-14 min-w-[44px] shrink-0 items-center justify-center rounded-md text-white"
+                  style={{ backgroundColor: "var(--theme-accent)" }}
+                  aria-label="Sponsors full screen"
+                >
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    width="24"
+                    height="24"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <path d="M15 3h6v6M14 10l7-7M9 21H3v-6M10 14l-7 7" />
+                  </svg>
+                </button>
+              ) : null
+            }
+          >
+            {sponsorRecords.length === 0 ? (
+              <p className="text-[#888] text-lg">Add logos in Control Panel.</p>
+            ) : (
+              <div className="flex flex-col items-stretch gap-3">
+                <div
+                  ref={sponsorPreviewRef}
+                  className="relative h-[380px] w-full overflow-hidden rounded-lg bg-[#0f0f0f]"
+                  style={{ contain: "paint" as const }}
+                >
+                  <div className="absolute inset-4 flex min-h-0 min-w-0 items-center justify-center sm:inset-[1.125rem]">
+                    <div
+                      key={sponsorIndex}
+                      className="sponsor-card-slide flex h-full w-full min-h-0 min-w-0 items-center justify-center"
+                    >
+                      {sponsorPreviewRec && (
+                        <img
+                          src={sponsorPreviewSrc}
+                          alt={sponsorPreviewRec.name}
+                          className="h-auto max-h-[93%] w-auto max-w-[96%] object-contain sm:max-h-[95%] sm:max-w-[97%]"
+                          decoding="async"
+                          fetchPriority="low"
+                          draggable={false}
+                        />
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+          </StatusPanel>
           
           {/* SIMA Status */}
           <StatusPanel title="SIMA Status">
+            <span className="sr-only" aria-hidden>
+              {simaRenderTick}
+            </span>
             <div className="grid grid-cols-2 gap-4 min-w-[300px]">
-              {simaStatuses.map((sima) => (
-                <div
-                  key={sima.id}
-                  className="mb-2 flex items-center space-x-3"
-                >
-                  <div
-                    className={`h-8 w-8 shrink-0 rounded-full ${sima.connected ? "bg-[#4caf50]" : "bg-[#f44336]"}`}
-                    aria-hidden
-                  />
-                  <div className="-translate-y-[0.08em] flex min-h-8 items-center text-[#e0e0e0] text-3xl uppercase leading-none">
-                    SIMA {sima.id}
+              {simaNames.map((name) => {
+                const online = isSimaNameOnline(name);
+                return (
+                  <div key={name} className="mb-2 flex items-center space-x-3">
+                    <div
+                      className={`h-8 w-8 shrink-0 rounded-full ${online ? "bg-[#4caf50]" : "bg-[#f44336]"}`}
+                      aria-hidden
+                    />
+                    <div className="-translate-y-[0.08em] flex min-h-8 items-center text-[#e0e0e0] text-2xl sm:text-3xl uppercase leading-none break-all">
+                      {name}
+                    </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </StatusPanel>
 
@@ -890,12 +1416,12 @@ export default function RobotDashboard() {
               <div className="text-[#ffffff] text-7xl font-bold text-left py-5 relative">
                 {isVoltageAvailable ? (
                   <span className="relative">
-                    {filteredVoltage.toFixed(1)} <span className="text-5xl absolute bottom-2 -right-10">V</span>
+                    {displayVoltage.toFixed(1)} <span className="text-5xl absolute bottom-2 -right-10">V</span>
                   </span>
                 ) : (
                   <span className="relative text-[#888888]">N/A</span>
                 )}
-                <div className="absolute bottom-0 left-0 h-1 bg-gradient-to-r from-[#ff4d4d] to-transparent w-full opacity-70"></div>
+                <div className="absolute bottom-0 left-0 h-1 w-full bg-gradient-to-r from-[var(--theme-accent)] to-transparent opacity-70"></div>
               </div>
               
               {/* Battery Icon - New Design */}
@@ -911,7 +1437,7 @@ export default function RobotDashboard() {
                   <div className="flex-1 relative p-0.5">
                     {/* Battery level fill */}
                     <div 
-                      className="absolute bottom-0 left-0 right-0 transition-all duration-1000"
+                      className="absolute bottom-0 left-0 right-0 transition-all duration-300"
                       style={{ 
                         height: `${getBatteryPercentage()}%`,
                         background: isVoltageAvailable 
@@ -960,62 +1486,17 @@ export default function RobotDashboard() {
             </div>
           </StatusPanel>
           
-          {/* BMS Panel Button (replaces Debug Panel) */}
-          <StatusPanel title="BMS Panel">
-            <div className="relative">
-              {isSettingOpen && (
-                <div className="bg-[#242424] p-4 rounded-md mb-4 relative">
-                  <div className="flex flex-col">
-                    <label className="text-[#e0e0e0] text-xl mb-2">Hostname (e.g. DIT-2026-10)</label>
-                    <input 
-                      type="text" 
-                      value={hostnameInput} 
-                      onChange={(e) => setHostnameInput(e.target.value)}
-                      placeholder={hostname}
-                      className="bg-[#333333] border border-[#444444] text-white px-3 py-2 rounded-md text-xl mb-3"
-                    />
-                    <div className="flex space-x-2">
-                      <button 
-                        onClick={saveHostname}
-                        className="bg-[#d32f2f] text-white px-4 py-2 rounded-md hover:bg-[#ff4d4d]"
-                      >
-                        SAVE
-                      </button>
-                      <button 
-                        onClick={() => setIsSettingOpen(false)}
-                        className="bg-[#333333] text-white px-4 py-2 rounded-md hover:bg-[#444444]"
-                      >
-                        CANCEL
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              )}
-              
-              <div className="flex flex-col">
-                <div className="flex justify-between items-center mb-3">
-                  <div className="text-[#e0e0e0] text-xl">Host: {hostname}</div>
-                  <button 
-                    onClick={() => setIsSettingOpen(!isSettingOpen)}
-                    className="bg-[#333333] text-white p-2 rounded-md hover:bg-[#444444] text-xl flex items-center justify-center"
-                    aria-label="Settings"
-                  >
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                      <path d="M12 15C13.6569 15 15 13.6569 15 12C15 10.3431 13.6569 9 12 9C10.3431 9 9 10.3431 9 12C9 13.6569 10.3431 15 12 15Z" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                      <path d="M19.4 15C19.2669 15.3016 19.2272 15.6362 19.286 15.9606C19.3448 16.285 19.4995 16.5843 19.73 16.82L19.79 16.88C19.976 17.0657 20.1235 17.2863 20.2241 17.5291C20.3248 17.7719 20.3766 18.0322 20.3766 18.295C20.3766 18.5578 20.3248 18.8181 20.2241 19.0609C20.1235 19.3037 19.976 19.5243 19.79 19.71C19.6043 19.896 19.3837 20.0435 19.1409 20.1441C18.8981 20.2448 18.6378 20.2966 18.375 20.2966C18.1122 20.2966 17.8519 20.2448 17.6091 20.1441C17.3663 20.0435 17.1457 19.896 16.96 19.71L16.9 19.65C16.6643 19.4195 16.365 19.2648 16.0406 19.206C15.7162 19.1472 15.3816 19.1869 15.08 19.32C14.7842 19.4468 14.532 19.6572 14.3543 19.9255C14.1766 20.1938 14.0813 20.5082 14.08 20.83V21C14.08 21.5304 13.8693 22.0391 13.4942 22.4142C13.1191 22.7893 12.6104 23 12.08 23C11.5496 23 11.0409 22.7893 10.6658 22.4142C10.2907 22.0391 10.08 21.5304 10.08 21V20.91C10.0723 20.579 9.96512 20.258 9.77251 19.9887C9.5799 19.7194 9.31074 19.5143 9 19.4C8.69838 19.2669 8.36381 19.2272 8.03941 19.286C7.71502 19.3448 7.41568 19.4995 7.18 19.73L7.12 19.79C6.93425 19.976 6.71368 20.1235 6.47088 20.2241C6.22808 20.3248 5.96783 20.3766 5.705 20.3766C5.44217 20.3766 5.18192 20.3248 4.93912 20.2241C4.69632 20.1235 4.47575 19.976 4.29 19.79C4.10405 19.6043 3.95653 19.3837 3.85588 19.1409C3.75523 18.8981 3.70343 18.6378 3.70343 18.375C3.70343 18.1122 3.75523 17.8519 3.85588 17.6091C3.95653 17.3663 4.10405 17.1457 4.29 16.96L4.35 16.9C4.58054 16.6643 4.73519 16.365 4.794 16.0406C4.85282 15.7162 4.81312 15.3816 4.68 15.08C4.55324 14.7842 4.34276 14.532 4.07447 14.3543C3.80618 14.1766 3.49179 14.0813 3.17 14.08H3C2.46957 14.08 1.96086 13.8693 1.58579 13.4942C1.21071 13.1191 1 12.6104 1 12.08C1 11.5496 1.21071 11.0409 1.58579 10.6658C1.96086 10.2907 2.46957 10.08 3 10.08H3.09C3.42099 10.0723 3.742 9.96512 4.0113 9.77251C4.28059 9.5799 4.48572 9.31074 4.6 9C4.73312 8.69838 4.77282 8.36381 4.714 8.03941C4.65519 7.71502 4.50054 7.41568 4.27 7.18L4.21 7.12C4.02405 6.93425 3.87653 6.71368 3.77588 6.47088C3.67523 6.22808 3.62343 5.96783 3.62343 5.705C3.62343 5.44217 3.67523 5.18192 3.77588 4.93912C3.87653 4.69632 4.02405 4.47575 4.21 4.29C4.39575 4.10405 4.61632 3.95653 4.85912 3.85588C5.10192 3.75523 5.36217 3.70343 5.625 3.70343C5.88783 3.70343 6.14808 3.75523 6.39088 3.85588C6.63368 3.95653 6.85425 4.10405 7.04 4.29L7.1 4.35C7.33568 4.58054 7.63502 4.73519 7.95941 4.794C8.28381 4.85282 8.61838 4.81312 8.92 4.68H9C9.29577 4.55324 9.54802 4.34276 9.72569 4.07447C9.90337 3.80618 9.99872 3.49179 10 3.17V3C10 2.46957 10.2107 1.96086 10.5858 1.58579C10.9609 1.21071 11.4696 1 12 1C12.5304 1 13.0391 1.21071 13.4142 1.58579C13.7893 1.96086 14 2.46957 14 3V3.09C14.0013 3.41179 14.0966 3.72618 14.2743 3.99447C14.452 4.26276 14.7042 4.47324 15 4.6C15.3016 4.73312 15.6362 4.77282 15.9606 4.714C16.285 4.65519 16.5843 4.50054 16.82 4.27L16.88 4.21C17.0657 4.02405 17.2863 3.87653 17.5291 3.77588C17.7719 3.67523 18.0322 3.62343 18.295 3.62343C18.5578 3.62343 18.8181 3.67523 19.0609 3.77588C19.3037 3.87653 19.5243 4.02405 19.71 4.21C19.896 4.39575 20.0435 4.61632 20.1441 4.85912C20.2448 5.10192 20.2966 5.36217 20.2966 5.625C20.2966 5.88783 20.2448 6.14808 20.1441 6.39088C20.0435 6.63368 19.896 6.85425 19.71 7.04L19.65 7.1C19.4195 7.33568 19.2648 7.63502 19.206 7.95941C19.1472 8.28381 19.1869 8.61838 19.32 8.92V9C19.4468 9.29577 19.6572 9.54802 19.9255 9.72569C20.1938 9.90337 20.5082 9.99872 20.83 10H21C21.5304 10 22.0391 10.2107 22.4142 10.5858C22.7893 10.9609 23 11.4696 23 12C23 12.5304 22.7893 13.0391 22.4142 13.4142C22.0391 13.7893 21.5304 14 21 14H20.91C20.5882 14.0013 20.2738 14.0966 20.0055 14.2743C19.7372 14.452 19.5268 14.7042 19.4 15Z" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                    </svg>
-                  </button>
-                </div>
-                
-                <a 
-                  href={bmsUrl} 
-                  target="_blank" 
-                  rel="noopener noreferrer"
-                  className="bg-[#d32f2f] text-white text-2xl font-bold py-4 px-6 rounded-md w-full block text-center uppercase tracking-wider hover:bg-[#ff4d4d] transition-colors duration-300"
-                >
-                  CONNECT TO BMS
-                </a>
-              </div>
+          <StatusPanel title="ESP-Daemon">
+            <div className="flex flex-col gap-3">
+              <a
+                href={bmsUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-white text-2xl font-bold py-4 px-6 rounded-md w-full block text-center tracking-wider transition-colors"
+                style={{ backgroundColor: "var(--theme-accent)" }}
+              >
+                Connect
+              </a>
             </div>
           </StatusPanel>
 
@@ -1096,31 +1577,31 @@ export default function RobotDashboard() {
               <div className="grid grid-cols-2 gap-3">
                 <button 
                   onClick={() => handleProfileChange('didilong')}
-                  className={`py-2 px-3 rounded text-white font-semibold ${navProfile === 'didilong' ? 'bg-[#d32f2f]' : 'bg-[#333]'}`}
+                  className={`py-2 px-3 rounded text-white font-semibold ${navProfile === 'didilong' ? 'bg-theme-accent' : 'bg-[#333]'}`}
                 >
                   DIDILONG
                 </button>
                 <button 
                   onClick={() => handleProfileChange('fast')}
-                  className={`py-2 px-3 rounded text-white font-semibold ${navProfile === 'fast' ? 'bg-[#d32f2f]' : 'bg-[#333]'}`}
+                  className={`py-2 px-3 rounded text-white font-semibold ${navProfile === 'fast' ? 'bg-theme-accent' : 'bg-[#333]'}`}
                 >
                   FAST
                 </button>
                 <button 
                   onClick={() => handleProfileChange('slow')}
-                  className={`py-2 px-3 rounded text-white font-semibold ${navProfile === 'slow' ? 'bg-[#d32f2f]' : 'bg-[#333]'}`}
+                  className={`py-2 px-3 rounded text-white font-semibold ${navProfile === 'slow' ? 'bg-theme-accent' : 'bg-[#333]'}`}
                 >
                   SLOW
                 </button>
                 <button 
                   onClick={() => handleProfileChange('linearBoost')}
-                  className={`py-2 px-3 rounded text-white font-semibold ${navProfile === 'linearBoost' ? 'bg-[#d32f2f]' : 'bg-[#333]'}`}
+                  className={`py-2 px-3 rounded text-white font-semibold ${navProfile === 'linearBoost' ? 'bg-theme-accent' : 'bg-[#333]'}`}
                 >
                   LINEAR BOOST
                 </button>
                 <button 
                   onClick={() => handleProfileChange('angularBoost')}
-                  className={`py-2 px-3 rounded text-white font-semibold ${navProfile === 'angularBoost' ? 'bg-[#d32f2f]' : 'bg-[#333]'}`}
+                  className={`py-2 px-3 rounded text-white font-semibold ${navProfile === 'angularBoost' ? 'bg-theme-accent' : 'bg-[#333]'}`}
                 >
                   ANGULAR BOOST
                 </button>
@@ -1222,8 +1703,8 @@ export default function RobotDashboard() {
                 className="text-white text-xl font-bold py-4 px-5 rounded-md w-full block text-center uppercase tracking-wider transition-all duration-300 mt-8 relative overflow-hidden"
                 style={{
                   background: activeButton === 'update' && buttonPressProgress > 0 
-                    ? `linear-gradient(to right, #4caf50 ${buttonPressProgress}%, #d32f2f ${buttonPressProgress}%)`
-                    : '#d32f2f'
+                    ? `linear-gradient(to right, #4caf50 ${buttonPressProgress}%, var(--theme-accent) ${buttonPressProgress}%)`
+                    : "var(--theme-accent)",
                 }}
                 onMouseDown={() => startLongPress('update')}
                 onMouseUp={cancelLongPress}
@@ -1252,7 +1733,18 @@ export default function RobotDashboard() {
               </button>
               
               {updateStatus.visible && (
-                <div className={`text-center py-2 rounded-md text-lg ${updateStatus.isError ? 'bg-[#3a0909] text-[#ff6b6b]' : 'bg-[#0a2e0a] text-[#6bff6b]'}`}>
+                <div
+                  className={`mt-2 w-full text-center text-lg ${
+                    updateStatus.isError
+                      ? "text-theme-accent"
+                      : "bg-[#0a2e0a] text-[#6bff6b]"
+                  } rounded-md py-2`}
+                  style={
+                    updateStatus.isError
+                      ? { background: "color-mix(in srgb, var(--theme-accent) 14%, #1a0a0a)" }
+                      : undefined
+                  }
+                >
                   {updateStatus.message}
                 </div>
               )}
@@ -1265,7 +1757,9 @@ export default function RobotDashboard() {
 
       {/* Floating Bridge Status Indicator - Now a refresh button */}
       <div 
-        className={`fixed ${isHalfScreen ? 'bottom-40' : 'bottom-10'} right-10 z-50 flex items-center gap-8 backdrop-blur-md rounded-2xl px-8 py-5 border-2 border-[#444] shadow-2xl transition-all duration-300 cursor-pointer select-none`}
+        className={`fixed ${
+          isHalfScreen ? "bottom-30" : "bottom-20"
+        } right-6 z-50 flex max-w-[min(100%,calc(100vw-1.5rem))] cursor-pointer select-none items-center gap-6 rounded-2xl border-2 border-[#444] bg-black/70 px-5 py-4 shadow-2xl backdrop-blur-md transition-all duration-300 sm:right-8 sm:gap-8 sm:px-8 sm:py-5`}
         style={{
           background: pressProgress > 0 
             ? `linear-gradient(to right, rgba(76, 175, 80, 0.8) ${pressProgress}%, rgba(0, 0, 0, 0.7) ${pressProgress}%)`
@@ -1329,16 +1823,16 @@ export default function RobotDashboard() {
         }}
       >
         <div className="relative">
-          <div className={`w-8 h-8 rounded-full ${rosConnected ? "bg-[#d32f2f]" : "bg-[#444]"}`}></div>
+          <div className={`w-8 h-8 rounded-full ${rosConnected ? "bg-theme-accent" : "bg-[#444]"}`}></div>
           {rosConnected && (
-            <div className="absolute inset-0 w-8 h-8 rounded-full bg-[#d32f2f] animate-ping opacity-75"></div>
+            <div className="absolute inset-0 w-8 h-8 rounded-full bg-theme-accent animate-ping opacity-75"></div>
           )}
         </div>
         <div className="flex flex-col">
           <div className="text-white text-2xl font-mono font-bold leading-tight">
             ROS Bridge
           </div>
-          <div className={`text-xl font-mono ${rosConnected ? "text-[#ff4d4d]" : "text-[#999]"}`}>
+          <div className={`text-xl font-mono ${rosConnected ? "text-theme-accent" : "text-[#999]"}`}>
             {rosConnected ? "Connected" : "Press to refresh"}
           </div>
         </div>
@@ -1347,7 +1841,7 @@ export default function RobotDashboard() {
       </div>
 
       {/* Add extra bottom space to prevent content from being hidden behind fixed elements */}
-      <div className="h-32 md:h-40 w-full"></div>
+      <div className="h-20 w-full sm:h-24" aria-hidden />
 
       <style jsx={true} global={true}>{`
         ::-webkit-scrollbar {
@@ -1629,15 +2123,7 @@ export default function RobotDashboard() {
         }
       `}</style>
     </div>
-  );
-}
-
-function StatusPanel({ title, children }: { title: string; children?: React.ReactNode }) {
-  return (
-    <div className="bg-[#181818] p-6 rounded-lg shadow-md mb-6 w-full min-w-[300px]">
-      {title && <h3 className="text-4xl font-bold text-[#ff4d4d] mb-6 uppercase">{title}</h3>}
-      <div>{children}</div>
-    </div>
+    </>
   );
 }
 
@@ -1665,9 +2151,9 @@ function StatusItem({ color, label, key }: { color: string; label: string; key?:
 function CheckboxItem({ label, checked }: { label: string; checked: boolean }) {
   return (
     <div className="flex items-center space-x-5 mb-5">
-      <div className="flex h-8 w-8 shrink-0 items-center justify-center border border-[#d32f2f]">
+      <div className="flex h-8 w-8 shrink-0 items-center justify-center border border-theme-accent">
         {checked ? (
-          <div className="h-5 w-5 bg-[#d32f2f]" />
+          <div className="h-5 w-5 bg-theme-accent" />
         ) : (
           <div className="h-5 w-5 bg-transparent" />
         )}

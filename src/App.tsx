@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import Playmat from "./components/playmat";
 import RobotDashboard from "./components/status";
 import ControlAreas from "./components/control";
@@ -108,18 +108,34 @@ function App() {
   const [touchStartY, setTouchStartY] = useState(0);
   const [touchEndY, setTouchEndY] = useState(0);
   const [isSwiping, setIsSwiping] = useState(false);
+  /** When a gesture begins on a range/scroll/interactive, do not map it to panel swipe */
+  const blockAppSwipeForGestureRef = useRef(false);
+
+  function touchTargetShouldBlockAppSwipe(t: EventTarget | null) {
+    if (!t || !(t instanceof Element)) return false;
+    return (
+      t.closest(
+        'input[type="range"],textarea,[data-block-app-panel-swipe]'
+      ) != null
+    );
+  }
 
   // Handle touch start
   const handleTouchStart = (e: React.TouchEvent) => {
-    setTouchStartX(e.targetTouches[0].clientX);
-    setTouchEndX(e.targetTouches[0].clientX);
-    setTouchStartY(e.targetTouches[0].clientY);
-    setTouchEndY(e.targetTouches[0].clientY);
+    const touch = e.targetTouches[0];
+    blockAppSwipeForGestureRef.current = touchTargetShouldBlockAppSwipe(
+      e.target
+    );
+    setTouchStartX(touch.clientX);
+    setTouchEndX(touch.clientX);
+    setTouchStartY(touch.clientY);
+    setTouchEndY(touch.clientY);
     setIsSwiping(false);
   };
 
   // Handle touch move
   const handleTouchMove = (e: React.TouchEvent) => {
+    if (blockAppSwipeForGestureRef.current) return;
     setTouchEndX(e.targetTouches[0].clientX);
     setTouchEndY(e.targetTouches[0].clientY);
     setIsSwiping(true);
@@ -127,6 +143,10 @@ function App() {
 
   // Handle touch end
   const handleTouchEnd = () => {
+    if (blockAppSwipeForGestureRef.current) {
+      blockAppSwipeForGestureRef.current = false;
+      return;
+    }
     if (!isSwiping) return;
 
     const horizontalDistance = touchEndX - touchStartX;
@@ -175,6 +195,10 @@ function App() {
         });
       }
     }
+  };
+
+  const handleTouchCancel = () => {
+    blockAppSwipeForGestureRef.current = false;
   };
 
   // Navigate to a specific panel
@@ -228,93 +252,54 @@ function App() {
   };
 
   return (
-    <div className="h-screen w-screen overflow-hidden flex flex-col bg-[#0e0e0e] text-white" style={{ fontFamily: "var(--font-display)" }}>
-      {/* Header with panel titles and display toggle - Dynamic Island style moved to right */}
-      <div className={`flex ${isHalfScreen ? 'justify-end pr-5' : 'justify-center'} pt-5`}>
-        <header className={`p-4 bg-[#181818] shadow-lg z-10 border border-[#333333] rounded-full w-auto ${isHalfScreen ? '' : 'mx-auto'} backdrop-blur-sm relative`}>
-          <div className="flex items-center px-6">
-            <div className={`flex justify-center space-x-4`}>
-            {panels.map((panel, index) => (
-              <button
-                key={panel.id}
-                onClick={() => navigateToPanel(index)}
-                  className={`px-6 py-3 rounded-full transition-all text-2xl md:text-3xl uppercase tracking-wider ${
-                  (isSmallScreen ? verticalPanel : activePanel) === index
-                      ? "bg-[#d32f2f] text-white"
-                      : "bg-[#242424] hover:bg-[#2c2c2c] text-[#e0e0e0]"
-                }`}
-              >
-                {panel.title}
-              </button>
-            ))}
-          </div>
-              <button
-                onClick={() => {
-                if (isHalfScreen) {
-                  toggleHalfScreen(false);
-                  // Will be handled by the effect based on window size
-                } else {
-                  toggleHalfScreen(true);
-                  // Force vertical layout in half-screen mode
-                  setIsSmallScreen(true);
-                  }
-                }}
-              className="ml-4 p-3 rounded-full bg-[#242424] hover:bg-[#2c2c2c] text-2xl transform transition-transform hover:scale-110 w-12 h-12 flex items-center justify-center"
-                aria-label="Toggle half screen mode"
-              title={isHalfScreen ? "Switch to full screen" : "Switch to half screen"}
-              >
-              {isHalfScreen ? <MdOutlineFullscreenExit /> : <MdOutlineFullscreen />}
-              </button>
-            </div>
-        </header>
-        </div>
-
-      {/* Main content area */}
-      <main 
-        className={`flex-1 relative overflow-hidden ${isHalfScreen ? 'flex' : ''}`}
+    <div
+      className="relative h-[100dvh] min-h-0 w-full max-w-[100vw] overflow-hidden bg-[#0e0e0e] text-white"
+      style={{ fontFamily: "var(--font-display)" }}
+    >
+      {/* L0: full-bleed — scroll + slide happen here; same background edge-to-edge */}
+      <main
+        className={`absolute inset-0 z-0 min-h-0 ${isHalfScreen ? "flex flex-row" : "overflow-hidden"}`}
         onTouchStart={handleTouchStart}
         onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}
+        onTouchCancel={handleTouchCancel}
       >
-        {/* Black half for dual monitor support - removed extra toggle button */}
         {isHalfScreen && (
-          <div className="w-1/2 bg-[#0e0e0e] flex-shrink-0 relative flex flex-col items-center justify-center text-[#e0e0e0] hover:text-[#ff4d4d]">
-            {/* Removed duplicate toggle button */}
-          </div>
+          <div className="relative flex h-full min-w-0 w-1/2 flex-shrink-0 flex-col items-center justify-center bg-[#0e0e0e] text-[#e0e0e0] hover:text-theme-accent" />
         )}
-        {/* Large screen horizontal layout - only shown when not in half-screen mode */}
         {!isSmallScreen && (
           <div
-            className="absolute inset-0 flex transition-transform duration-300 ease-out"
+            className="absolute inset-0 flex min-h-0 transition-transform duration-300 ease-out"
             style={{ transform: `translateX(-${activePanel * 100}%)` }}
           >
             {panels.map((panel) => (
-              <div key={panel.id} className="w-full h-full flex-shrink-0">
+              <div key={panel.id} className="flex h-full min-h-0 w-full min-w-0 flex-shrink-0">
                 {panel.component}
               </div>
             ))}
           </div>
         )}
 
-        {/* Small screen vertical layout - static positioning strategy */}
-          {isSmallScreen && (
-            <div className={`h-full relative ${isHalfScreen ? 'w-1/2 pl-4' : 'w-full'}`}>
+        {isSmallScreen && (
+          <div
+            className={`relative h-full min-h-0 min-w-0 ${
+              isHalfScreen ? "w-1/2 min-w-0 shrink-0 pl-4" : "w-full"
+            }`}
+          >
             {panels.map((panel, index) => {
-              // Only render visible panels to improve performance
               const isPanelVisible = Math.abs(index - verticalPanel) <= 1;
-              
+
               if (!isPanelVisible) {
                 return null;
               }
-              
-              // Calculate the position for the panel
-              let position = 1; // Default is center (current)
+
+              let position = 1;
               if (index < verticalPanel) {
-                position = 0; // Above
+                position = 0;
               } else if (index > verticalPanel) {
-                position = 2; // Below
+                position = 2;
               }
-              
+
               return (
                 <div
                   key={panel.id}
@@ -325,11 +310,11 @@ function App() {
                     zIndex: position === 1 ? 10 : 5,
                   }}
                 >
-                  <div className={`h-full w-full flex flex-col ${isHalfScreen ? 'bg-[#181818] shadow-lg rounded-l-xl' : 'bg-[#181818]'}`}>
-                    <div className="flex-1 overflow-auto">
-                      <div className="h-full">
-                        {panel.component}
-                      </div>
+                  <div
+                    className={`flex h-full w-full min-h-0 flex-col ${isHalfScreen ? "rounded-l-xl bg-[#181818] shadow-lg" : "bg-[#181818]"}`}
+                  >
+                    <div className="min-h-0 flex-1 overflow-auto">
+                      <div className="h-full min-h-0">{panel.component}</div>
                     </div>
                   </div>
                 </div>
@@ -339,62 +324,115 @@ function App() {
         )}
       </main>
 
-      {/* Navigation dots - Dynamic Island style moved to right with adjusted position */}
-      <div className="flex justify-end mb-5 mr-5">
-        <div className={`p-3 flex ${isHalfScreen ? 'w-auto' : ''} space-x-4 bg-[#181818] z-10 rounded-full shadow-lg border border-[#333333] px-6`}>
-        {panels.map((panel, index) => (
-          <button
-            key={index}
-            onClick={() => navigateToPanel(index)}
-            className={`transition-all ${
-            isSmallScreen 
-                ? `w-3 h-8 rounded-full ${
-                  verticalPanel === index
-                      ? "bg-[#d32f2f] h-10"
-                      : "bg-[#2c2c2c] hover:bg-[#ff4d4d]"
-                }`
-                : `w-4 h-4 rounded-full ${
-                  activePanel === index
-                      ? "bg-[#d32f2f]"
-                      : "bg-[#2c2c2c] hover:bg-[#ff4d4d]"
-                }`
+      {/* L1: top — floats above scroll; empty strip passes through to main */}
+      <div
+        className={`pointer-events-none absolute top-0 left-0 right-0 z-30 flex ${
+          isHalfScreen ? "justify-end pr-4" : "justify-center"
+        } pt-4 sm:pt-5`}
+      >
+        <header
+          className={`pointer-events-auto relative mx-auto w-auto max-w-full rounded-full border border-[#333333] bg-[#181818] py-4 pl-5 pr-4 shadow-lg backdrop-blur-sm min-[500px]:pl-6 min-[500px]:pr-5 sm:pl-7 sm:py-4 sm:pr-6 ${
+            isHalfScreen ? "" : ""
           }`}
-            aria-label={`Go to ${panel.title}`}
-          />
-        ))}
-          
-          {/* Integrated vertical navigation buttons */}
+        >
+          <div className="flex w-full min-w-0 max-w-[min(100vw-1.5rem,80rem)] flex-nowrap items-center justify-center gap-4 sm:gap-5">
+            <div className="flex min-w-0 items-center space-x-4">
+              {panels.map((panel, index) => (
+                <button
+                  key={panel.id}
+                  onClick={() => navigateToPanel(index)}
+                  className={`inline-flex shrink-0 items-center justify-center px-6 py-3 text-2xl uppercase leading-none tracking-wider transition-all md:text-3xl ${
+                    (isSmallScreen ? verticalPanel : activePanel) === index
+                      ? "rounded-full bg-theme-accent text-white"
+                      : "rounded-full bg-[#242424] text-[#e0e0e0] hover:bg-[#2c2c2c]"
+                  }`}
+                >
+                  <span className="inline-block -translate-y-[0.06em]">
+                    {panel.title}
+                  </span>
+                </button>
+              ))}
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                if (isHalfScreen) {
+                  toggleHalfScreen(false);
+                } else {
+                  toggleHalfScreen(true);
+                  setIsSmallScreen(true);
+                }
+              }}
+              className="inline-flex h-12 w-12 shrink-0 select-none items-center justify-center rounded-full border border-white/20 bg-[#242424] p-0 text-2xl text-white/95 transition-transform hover:scale-110 hover:bg-[#2c2c2c]"
+              aria-label="Toggle half screen mode"
+              title={isHalfScreen ? "Switch to full screen" : "Switch to half screen"}
+            >
+              {isHalfScreen ? <MdOutlineFullscreenExit /> : <MdOutlineFullscreen />}
+            </button>
+          </div>
+        </header>
+      </div>
+
+      {/* L1: bottom page dots + vertical nav */}
+      {/* 不要用 p-* 一鍵四邊再疊 pb-*：p-2 的 bottom 與 pb-3 只差 4px，幾乎看不出來；改用分開的 pt/px 與較大的 pb */}
+      <div className="pointer-events-none absolute right-7 bottom-0 z-30 px-2 pt-2 pb-5 sm:px-2.5 sm:pt-2.5 sm:pb-6">
+        <div
+          className={`pointer-events-auto flex space-x-4 rounded-full border border-[#333333] bg-[#181818] p-3 shadow-lg ${
+            isHalfScreen ? "w-auto" : ""
+          } px-6`}
+        >
+          {panels.map((panel, index) => (
+            <button
+              key={index}
+              onClick={() => navigateToPanel(index)}
+              className={`transition-all ${
+                isSmallScreen
+                  ? `h-8 w-3 rounded-full ${
+                      verticalPanel === index
+                        ? "h-10 bg-theme-accent"
+                        : "app-nav-dots-idle"
+                    }`
+                  : `h-4 w-4 rounded-full ${
+                      activePanel === index
+                        ? "bg-theme-accent"
+                        : "app-nav-dots-idle"
+                    }`
+              }`}
+              aria-label={`Go to ${panel.title}`}
+            />
+          ))}
+
           {isSmallScreen && (
             <>
               {verticalPanel > 0 && (
-                <button 
+                <button
                   onClick={() => {
                     const newValue = verticalPanel - 1;
                     setVerticalPanel(newValue);
                     try {
-                      localStorage.setItem('verticalPanel', newValue.toString());
+                      localStorage.setItem("verticalPanel", newValue.toString());
                     } catch (error) {
-                      console.warn('Could not save vertical panel setting:', error);
+                      console.warn("Could not save vertical panel setting:", error);
                     }
                   }}
-                  className="w-10 h-10 rounded-full flex items-center justify-center bg-[#242424] text-[#e0e0e0] hover:text-white hover:bg-[#d32f2f] text-xl shadow-lg"
+                  className="flex h-10 w-10 items-center justify-center rounded-full bg-[#242424] text-xl text-[#e0e0e0] shadow-lg hover:bg-theme-accent hover:text-white"
                   aria-label="Previous panel"
                 >
                   <VscChevronDown className="text-xl" />
                 </button>
               )}
               {verticalPanel < panels.length - 1 && (
-                <button 
+                <button
                   onClick={() => {
                     const newValue = verticalPanel + 1;
                     setVerticalPanel(newValue);
                     try {
-                      localStorage.setItem('verticalPanel', newValue.toString());
+                      localStorage.setItem("verticalPanel", newValue.toString());
                     } catch (error) {
-                      console.warn('Could not save vertical panel setting:', error);
+                      console.warn("Could not save vertical panel setting:", error);
                     }
                   }}
-                  className="w-10 h-10 rounded-full flex items-center justify-center bg-[#242424] text-[#e0e0e0] hover:text-white hover:bg-[#d32f2f] text-xl shadow-lg"
+                  className="flex h-10 w-10 items-center justify-center rounded-full bg-[#242424] text-xl text-[#e0e0e0] shadow-lg hover:bg-theme-accent hover:text-white"
                   aria-label="Next panel"
                 >
                   <VscChevronUp className="text-xl" />

@@ -1,14 +1,59 @@
-import React, { useRef, useEffect, useCallback, useState } from 'react';
-
-// Remove inline type declaration
-// declare module '*.png' {
-//   const content: string;
-//   export default content;
-// }
-
-import playmatImage from "../assets/playmat_2026_FINAL.png";
+import React, { useRef, useEffect, useCallback, useState, useMemo } from 'react';
+import * as Popover from '@radix-ui/react-popover';
+import { PLAYMAT_BACKGROUNDS, DEFAULT_PLAYMAT_BG_ID } from '../assets/playmatBackgrounds';
+import { PLAYMAT_BG_ID_KEY } from '../utils/storageKeys';
 import { useRosConnection } from "../utils/useRosConnection";
 import { getButtonStatesAndSequence, updateButtonStatesAndSequence } from "../api/fileOperations";
+import { clsx } from "clsx";
+import { validateJsonMissionPlansJson } from "../utils/uploadValidation";
+
+const MISSION_INDEX_COUNT = 18; // 0-17: pantry 0-9, collection 10-17 (issue #2)
+
+/** Pre-2026 field id on the asset (0-9, 11-18; 10/19 are removed) -> mission index. */
+const LEGACY_FIELD_ID_TO_MISSION: Record<number, number> = {
+  0: 6, 1: 15, 2: 14, 3: 7, 4: 17, 5: 12, 6: 2, 7: 10, 8: 11, 9: 3, 11: 9, 12: 16, 13: 4, 14: 1, 15: 0, 16: 13, 17: 5, 18: 8,
+};
+
+function defaultMissionButtonStates(): Record<number, boolean> {
+  return Object.fromEntries([...Array(MISSION_INDEX_COUNT).keys()].map((n) => [n, false])) as Record<
+    number,
+    boolean
+  >;
+}
+
+type MigrateResult = { states: Record<number, boolean>; sequence: number[]; changed: boolean };
+
+function migrateButtonLoad(states: Record<number, boolean | undefined>, sequence: number[]): MigrateResult {
+  const keys = Object.keys(states || {}).map(Number);
+  const hasLegacySlots = keys.includes(10) || keys.includes(19) || keys.length > 18;
+  const hasLegacyInSeq = sequence.some((n) => n === 10 || n === 19);
+  const isLegacy = hasLegacySlots || hasLegacyInSeq;
+
+  if (isLegacy) {
+    const s = defaultMissionButtonStates();
+    for (const legacy of Object.keys(LEGACY_FIELD_ID_TO_MISSION).map(Number)) {
+      const m = LEGACY_FIELD_ID_TO_MISSION[legacy];
+      s[m] = Boolean(states[legacy]);
+    }
+    const newSeq: number[] = [];
+    for (const id of sequence) {
+      if (id === 10 || id === 19) continue;
+      const m = LEGACY_FIELD_ID_TO_MISSION[id];
+      if (m !== undefined) newSeq.push(m);
+    }
+    return { states: s, sequence: newSeq, changed: true };
+  }
+
+  const s = defaultMissionButtonStates();
+  for (let m = 0; m < MISSION_INDEX_COUNT; m++) {
+    s[m] = Boolean(states[m]);
+  }
+  const newSeq = sequence.filter(
+    (n) => Number.isInteger(n) && n >= 0 && n < MISSION_INDEX_COUNT
+  );
+  const changed = newSeq.length !== sequence.length;
+  return { states: s, sequence: newSeq, changed };
+}
 
 // Define plan sequence type
 interface PlanSequence {
@@ -17,20 +62,30 @@ interface PlanSequence {
   description: string;
 }
 
-// Default plan sequences
+// Default plan sequences (mission indices 0-17; remove corner slots 10/19)
 const DEFAULT_PLANS: PlanSequence[] = [
-  { id: 1, sequence: [1, 2, 4, 8, 16], description: 'Plan A' },
-  { id: 2, sequence: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 0], description: 'Plan X' },
+  { id: 1, sequence: [0, 1, 2, 3, 4], description: "Plan A" },
+  { id: 2, sequence: [...Array(18).keys()], description: "Plan X" },
 ];
 
 export default function Playmat() {
+  const [playmatBgId, setPlaymatBgId] = useState(() => {
+    try {
+      return localStorage.getItem(PLAYMAT_BG_ID_KEY) || DEFAULT_PLAYMAT_BG_ID;
+    } catch {
+      return DEFAULT_PLAYMAT_BG_ID;
+    }
+  });
+  const playmatImage = useMemo(
+    () => PLAYMAT_BACKGROUNDS.find((p) => p.id === playmatBgId)?.src ?? PLAYMAT_BACKGROUNDS[0].src,
+    [playmatBgId]
+  );
+  const [planMenuOpen, setPlanMenuOpen] = useState(false);
   const [estimatedScore, setEstimatedScore] = useState(128);
   const [isHalfScreen, setIsHalfScreen] = useState(false);
   const { connected, getTopicHandler, getServiceServer } = useRosConnection();
   // For storing button states
-  const [toggleStates, setToggleStates] = useState<Record<number, boolean>>(
-    Object.fromEntries([...Array(20).keys()].map(num => [num, false]))
-  );
+  const [toggleStates, setToggleStates] = useState<Record<number, boolean>>(() => defaultMissionButtonStates());
   // Loading state
   const [isLoading, setIsLoading] = useState(true);
   // Long press reset state
@@ -78,29 +133,43 @@ export default function Playmat() {
         console.warn('Could not detect half screen mode:', error);
       }
     };
-    
+    const onPlaymat = () => {
+      try {
+        setPlaymatBgId(localStorage.getItem(PLAYMAT_BG_ID_KEY) || DEFAULT_PLAYMAT_BG_ID);
+      } catch { /* */ }
+    };
     window.addEventListener('storage', checkHalfScreen);
-    return () => window.removeEventListener('storage', checkHalfScreen);
+    window.addEventListener('eurobot-playmat-bg', onPlaymat);
+    return () => {
+      window.removeEventListener('storage', checkHalfScreen);
+      window.removeEventListener('eurobot-playmat-bg', onPlaymat);
+    };
   }, []);
   
-  // Load initial button states from server
+  // Load initial state from /api/button-states (playmat + derived pantry/collection in button.json)
   useEffect(() => {
     const fetchButtonStates = async () => {
       setIsLoading(true);
       try {
         const { states, sequence } = await getButtonStatesAndSequence();
-        setToggleStates(states);
-        setCurrentSequence(sequence);
-        // According to the sequence, select the most similar plan
-        setSelectedPlanId(findMostSimilarPlan(sequence));
+        const migrated = migrateButtonLoad(
+          (states as Record<number, boolean | undefined>) || {},
+          Array.isArray(sequence) ? sequence : []
+        );
+        setToggleStates(migrated.states);
+        setCurrentSequence(migrated.sequence);
+        setSelectedPlanId(findMostSimilarPlan(migrated.sequence));
+        if (migrated.changed) {
+          await updateButtonStatesAndSequence(migrated.states, migrated.sequence);
+        }
       } catch (error) {
         console.error("Error loading button states and sequence:", error);
       } finally {
         setIsLoading(false);
       }
     };
-    
-    fetchButtonStates();
+
+    void fetchButtonStates();
   }, []);
 
   // Subscribe to score topics from ROS
@@ -116,6 +185,7 @@ export default function Playmat() {
     // Create topics for score updates
     const scoreTopic = getTopicHandler('/score', 'std_msgs/msg/Int32');
     const idealScoreTopic = getTopicHandler('/robot/startup/ideal_score', 'std_msgs/msg/Int32');
+    const gameScoreTopic = getTopicHandler('/game_score', 'std_msgs/msg/Int32');
     
     // Function to check if primary topic is alive
     const isPrimaryTopicAlive = () => {
@@ -150,46 +220,27 @@ export default function Playmat() {
         }
       });
     }
-    
+
+    if (gameScoreTopic) {
+      // Predicted / game score: drives the same "Estimated Score" on the playmat
+      gameScoreTopic.subscribe((message: any) => {
+        const score = parseInt(message.data, 10);
+        if (!isNaN(score)) setEstimatedScore(score);
+      });
+    }
+
     // Clean up subscriptions and timer
     return () => {
       try {
         if (scoreTopic) scoreTopic.unsubscribe();
         if (idealScoreTopic) idealScoreTopic.unsubscribe();
+        if (gameScoreTopic) gameScoreTopic.unsubscribe();
         clearInterval(connectionTimer);
       } catch (e) {
         console.error("Error unsubscribing from score topics:", e);
       }
     };
   }, [connected, getTopicHandler]);
-
-  // Function to toggle button state
-  const toggleButton = (button: keyof typeof toggleStates) => {
-    const newStates = {
-      ...toggleStates,
-      [button]: !toggleStates[button]
-    };
-    
-    setToggleStates(newStates);
-    
-    // Save the updated states to the server
-    updateButtonStatesAndSequence(newStates, currentSequence).catch(error => {
-      console.error("Error saving button states:", error);
-    });
-  };
-
-  // Function to reset all buttons
-  const handleResetButtons = async () => {
-    try {
-      setIsLoading(true);
-      await updateButtonStatesAndSequence(Object.fromEntries([...Array(20).keys()].map(num => [num, false])), []);
-      // Show temporary feedback that reset happened (could add a flash effect here)
-    } catch (error) {
-      console.error("Error resetting button states:", error);
-    } finally {
-      setIsLoading(false);
-    }
-  };
 
   // Set base button sizes
   const buttonSizes = {
@@ -205,10 +256,10 @@ export default function Playmat() {
     medium: isHalfScreen ? "text-2xl" : "text-3xl"
   };
 
-  // Adjust container for half-screen mode without changing the image
-  const containerClasses = isHalfScreen 
-    ? "relative flex items-center justify-center h-full bg-[#0e0e0e] transform-gpu origin-center"
-    : "relative flex items-center justify-center h-full bg-[#0e0e0e]";
+  // Top-align so the playmat and overlay are not pulled upward by vertical centering (avoids overlap with the floating tab bar; matches Robot Status flow)
+  const containerClasses = isHalfScreen
+    ? "relative flex items-center justify-center h-full w-full min-h-0 bg-[#0e0e0e] transform-gpu origin-center"
+    : "relative flex w-full min-h-0 items-start justify-center bg-[#0e0e0e]";
 
   // Load plans from localStorage
   useEffect(() => {
@@ -235,21 +286,30 @@ export default function Playmat() {
   // File upload handler
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        try {
-          const content = e.target?.result as string;
-          const newPlans = JSON.parse(content);
-          if (Array.isArray(newPlans)) {
-            savePlans(newPlans);
-          }
-        } catch (error) {
-          console.error('Error parsing uploaded file:', error);
-        }
-      };
-      reader.readAsText(file);
+    if (!file) return;
+    if (file.size < 1 || file.size > 4 * 1024 * 1024) {
+      console.warn("JSON plan file size not allowed");
+      return;
     }
+    if (!file.name.toLowerCase().endsWith(".json")) {
+      console.warn("Upload a .json file only");
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const content = e.target?.result as string;
+      const v = validateJsonMissionPlansJson(content);
+      if (!v.ok) {
+        console.warn("Invalid plans JSON:", v.reason);
+        return;
+      }
+      try {
+        savePlans(v.data as PlanSequence[]);
+      } catch (error) {
+        console.error("Error saving plans:", error);
+      }
+    };
+    reader.readAsText(file);
   };
 
   // Calculate sequence similarity
@@ -284,19 +344,17 @@ export default function Playmat() {
     return mostSimilarPlanId;
   };
 
-  // Handle button click
-  const handleButtonClick = (buttonId: number) => {
+  // mission index 0-17: server derives pantry/collection and stores in button.json
+  const handleButtonClick = (missionId: number) => {
     setToggleStates((prevStates: Record<number, boolean>) => {
-      // If button is already in sequence, don't change its state
       const newStates = { ...prevStates };
-      if (!currentSequence.includes(buttonId)) {
-        newStates[buttonId] = !prevStates[buttonId];
+      if (!currentSequence.includes(missionId)) {
+        newStates[missionId] = !prevStates[missionId];
       }
-      // Allow duplicates, push each time
       setCurrentSequence((prevSeq: number[]) => {
-        const newSeq = [...prevSeq, buttonId];
+        const newSeq = [...prevSeq, missionId];
         setSelectedPlanId(findMostSimilarPlan(newSeq));
-        updateButtonStatesAndSequence(newStates, newSeq); // Sync to server
+        void updateButtonStatesAndSequence(newStates, newSeq);
         return newSeq;
       });
       return newStates;
@@ -401,9 +459,9 @@ export default function Playmat() {
     setSelectedPlanId(null);
     setIsConfirming(false);
     setIsSuccess(false);
-    const resetStates = Object.fromEntries([...Array(20).keys()].map(num => [num, false]));
+    const resetStates = defaultMissionButtonStates();
     setToggleStates(resetStates);
-    updateButtonStatesAndSequence(resetStates, []);
+    void updateButtonStatesAndSequence(resetStates, []);
   };
 
   // Get button visual state
@@ -445,7 +503,8 @@ export default function Playmat() {
   };
 
   return (
-    <div className={containerClasses}>
+    <div className="box-border h-full min-h-0 w-full min-w-0 overflow-y-auto overflow-x-hidden bg-[#0e0e0e] px-3 pt-[var(--app-chrome-pad-top)] pb-[var(--app-chrome-pad-bottom)] [overflow-anchor:none] sm:px-5 lg:px-6">
+      <div className={containerClasses}>
       {/* Image container */}
       <div className={isHalfScreen ? "relative transform-gpu scale-[0.92]" : "relative"}>
       <img
@@ -454,199 +513,164 @@ export default function Playmat() {
         className="max-h-[85vh] max-w-full object-contain rounded-xl shadow-lg"
       />
 
-        {/* Change circular buttons to rounded squares (0-9) - using red-black theme */}
-        {/* Button 0 - Top right - Blue */}
+        {/* Mission point buttons: labels are mission index 0-17; corners 10/19 (old field) removed. */}
         <button
-          className={getButtonClassName(0, `absolute top-[23.7%] right-[39.2%] ${buttonSizes.smallSquare} rounded-xl flex items-center justify-center`)}
-          onClick={() => handleButtonClick(0)}
-          disabled={isLoading}
-        >
-          <span className={`${fontSize.large} font-bold`}>0</span>
-        </button>
-
-        {/* Button 1 - Right side - Black */}
-        <button
-          className={getButtonClassName(1, `absolute top-[34%] right-[4.5%] ${buttonSizes.tallRect} rounded-xl flex items-center justify-center`)}
-          onClick={() => handleButtonClick(1)}
-          disabled={isLoading}
-        >
-          <span className={`${fontSize.large} font-bold`}>1</span>
-        </button>
-
-        {/* Button 2 - Bottom right - Black */}
-        <button
-          className={getButtonClassName(2, `absolute bottom-[15%] right-[4.5%] ${buttonSizes.tallRect} rounded-xl flex items-center justify-center`)}
-          onClick={() => handleButtonClick(2)}
-          disabled={isLoading}
-        >
-          <span className={`${fontSize.large} font-bold`}>2</span>
-        </button>
-
-        {/* Button 3 - Right middle bottom - Black */}
-        <button
-          className={getButtonClassName(3, `absolute bottom-[36.3%] right-[24.2%] ${buttonSizes.smallSquare} rounded-xl flex items-center justify-center`)}
-          onClick={() => handleButtonClick(3)}
-          disabled={isLoading}
-        >
-          <span className={`${fontSize.large} font-bold`}>3</span>
-        </button>
-
-        {/* Button 4 - Right bottom side - Black */}
-        <button
-          className={getButtonClassName(4, `absolute bottom-[36.3%] right-[34.5%] ${buttonSizes.wideRect} rounded-xl flex items-center justify-center`)}
-          onClick={() => handleButtonClick(4)}
-          disabled={isLoading}
-        >
-          <span className={`${fontSize.large} font-bold`}>4</span>
-        </button>
-
-        {/* Button 5 - Bottom middle left - Black */}
-        <button
-          className={getButtonClassName(5, `absolute bottom-[36.3%] left-[34.5%] ${buttonSizes.wideRect} rounded-xl flex items-center justify-center`)}
-          onClick={() => handleButtonClick(5)}
-          disabled={isLoading}
-        >
-          <span className={`${fontSize.large} font-bold`}>5</span>
-        </button>
-
-        {/* Button 6 - Middle bottom - Black */}
-        <button
-          className={getButtonClassName(6, `absolute bottom-[36.3%] left-[24.2%] ${buttonSizes.smallSquare} rounded-xl flex items-center justify-center`)}
+          className={getButtonClassName(6, `absolute top-[23.7%] right-[39.2%] ${buttonSizes.smallSquare} rounded-xl flex items-center justify-center`)}
           onClick={() => handleButtonClick(6)}
           disabled={isLoading}
         >
           <span className={`${fontSize.large} font-bold`}>6</span>
         </button>
 
-        {/* Button 7 - Bottom left - Black */}
         <button
-          className={getButtonClassName(7, `absolute bottom-[15%] left-[4.5%] ${buttonSizes.tallRect} rounded-xl flex items-center justify-center`)}
+          className={getButtonClassName(15, `absolute top-[34%] right-[4.5%] ${buttonSizes.tallRect} rounded-xl flex items-center justify-center`)}
+          onClick={() => handleButtonClick(15)}
+          disabled={isLoading}
+        >
+          <span className={`${fontSize.large} font-bold`}>15</span>
+        </button>
+
+        <button
+          className={getButtonClassName(14, `absolute bottom-[15%] right-[4.5%] ${buttonSizes.tallRect} rounded-xl flex items-center justify-center`)}
+          onClick={() => handleButtonClick(14)}
+          disabled={isLoading}
+        >
+          <span className={`${fontSize.large} font-bold`}>14</span>
+        </button>
+
+        <button
+          className={getButtonClassName(7, `absolute bottom-[36.3%] right-[24.2%] ${buttonSizes.smallSquare} rounded-xl flex items-center justify-center`)}
           onClick={() => handleButtonClick(7)}
           disabled={isLoading}
         >
           <span className={`${fontSize.large} font-bold`}>7</span>
         </button>
 
-        {/* Button 8 - Left side - Black */}
         <button
-          className={getButtonClassName(8, `absolute top-[34%] left-[4.5%] ${buttonSizes.tallRect} rounded-xl flex items-center justify-center`)}
-          onClick={() => handleButtonClick(8)}
+          className={getButtonClassName(17, `absolute bottom-[36.3%] right-[34.5%] ${buttonSizes.wideRect} rounded-xl flex items-center justify-center`)}
+          onClick={() => handleButtonClick(17)}
           disabled={isLoading}
         >
-          <span className={`${fontSize.large} font-bold`}>8</span>
+          <span className={`${fontSize.large} font-bold`}>17</span>
         </button>
 
-        {/* Button 9 - Top left - Yellow */}
         <button
-          className={getButtonClassName(9, `absolute top-[23.7%] left-[39.2%] ${buttonSizes.smallSquare} rounded-xl flex items-center justify-center`)}
-          onClick={() => handleButtonClick(9)}
-          disabled={isLoading}
-        >
-          <span className={`${fontSize.large} font-bold`}>9</span>
-        </button>
-
-        {/* Square buttons (10-19) - Using background color scheme */}
-        {/* Button 10 - Top left square - Yellow */}
-        <button
-          className={getButtonClassName(10, `absolute top-[2%] left-[6.5%] ${buttonSizes.largeSquare} rounded-xl flex items-center justify-center`)}
-          onClick={() => handleButtonClick(10)}
-          disabled={isLoading}
-        >
-          <span className={`${fontSize.medium} font-bold`}>10</span>
-        </button>
-
-        {/* Button 11 - Right side square - Yellow */}
-        <button
-          className={getButtonClassName(11, `absolute top-[56.3%] right-[0.9%] ${buttonSizes.smallSquare} rounded-xl flex items-center justify-center`)}
-          onClick={() => handleButtonClick(11)}
-          disabled={isLoading}
-        >
-          <span className={`${fontSize.medium} font-bold`}>11</span>
-        </button>
-
-        {/* Button 12 - Bottom right corner square - Yellow */}
-        <button
-          className={getButtonClassName(12, `absolute bottom-[6%] right-[33%] ${buttonSizes.wideRect} rounded-xl flex items-center justify-center`)}
+          className={getButtonClassName(12, `absolute bottom-[36.3%] left-[34.5%] ${buttonSizes.wideRect} rounded-xl flex items-center justify-center`)}
           onClick={() => handleButtonClick(12)}
           disabled={isLoading}
         >
-          <span className={`${fontSize.medium} font-bold`}>12</span>
+          <span className={`${fontSize.large} font-bold`}>12</span>
         </button>
 
-        {/* Button 13 - Bottom middle square - Yellow */}
         <button
-          className={getButtonClassName(13, `absolute bottom-[1.5%] left-[47.6%] ${buttonSizes.smallSquare} rounded-xl flex items-center justify-center`)}
-          onClick={() => handleButtonClick(13)}
+          className={getButtonClassName(2, `absolute bottom-[36.3%] left-[24.2%] ${buttonSizes.smallSquare} rounded-xl flex items-center justify-center`)}
+          onClick={() => handleButtonClick(2)}
           disabled={isLoading}
         >
-          <span className={`${fontSize.medium} font-bold`}>13</span>
+          <span className={`${fontSize.large} font-bold`}>2</span>
         </button>
 
-        {/* Button 14 - Bottom left square - Yellow */}
         <button
-          className={getButtonClassName(14, `absolute bottom-[1.3%] left-[21%] ${buttonSizes.smallSquare} rounded-xl flex items-center justify-center`)}
-          onClick={() => handleButtonClick(14)}
+          className={getButtonClassName(10, `absolute bottom-[15%] left-[4.5%] ${buttonSizes.tallRect} rounded-xl flex items-center justify-center`)}
+          onClick={() => handleButtonClick(10)}
           disabled={isLoading}
         >
-          <span className={`${fontSize.medium} font-bold`}>14</span>
+          <span className={`${fontSize.large} font-bold`}>10</span>
         </button>
 
-        {/* Button 15 - Left side square - Blue */}
         <button
-          className={getButtonClassName(15, `absolute top-[56.3%] left-[0.9%] ${buttonSizes.smallSquare} rounded-xl flex items-center justify-center`)}
-          onClick={() => handleButtonClick(15)}
+          className={getButtonClassName(11, `absolute top-[34%] left-[4.5%] ${buttonSizes.tallRect} rounded-xl flex items-center justify-center`)}
+          onClick={() => handleButtonClick(11)}
           disabled={isLoading}
         >
-          <span className={`${fontSize.medium} font-bold`}>15</span>
+          <span className={`${fontSize.large} font-bold`}>11</span>
         </button>
 
-        {/* Button 16 - Bottom left corner square - Blue */}
         <button
-          className={getButtonClassName(16, `absolute bottom-[6%] left-[33%] ${buttonSizes.wideRect} rounded-xl flex items-center justify-center`)}
+          className={getButtonClassName(3, `absolute top-[23.7%] left-[39.2%] ${buttonSizes.smallSquare} rounded-xl flex items-center justify-center`)}
+          onClick={() => handleButtonClick(3)}
+          disabled={isLoading}
+        >
+          <span className={`${fontSize.large} font-bold`}>3</span>
+        </button>
+
+        <button
+          className={getButtonClassName(9, `absolute top-[56.3%] right-[0.9%] ${buttonSizes.smallSquare} rounded-xl flex items-center justify-center`)}
+          onClick={() => handleButtonClick(9)}
+          disabled={isLoading}
+        >
+          <span className={`${fontSize.medium} font-bold`}>9</span>
+        </button>
+
+        <button
+          className={getButtonClassName(16, `absolute bottom-[6%] right-[33%] ${buttonSizes.wideRect} rounded-xl flex items-center justify-center`)}
           onClick={() => handleButtonClick(16)}
           disabled={isLoading}
         >
           <span className={`${fontSize.medium} font-bold`}>16</span>
         </button>
 
-        {/* Button 17 - Bottom right square - Blue */}
         <button
-          className={getButtonClassName(17, `absolute bottom-[36.3%] right-[47.5%] ${buttonSizes.smallSquare} rounded-xl flex items-center justify-center`)}
-          onClick={() => handleButtonClick(17)}
+          className={getButtonClassName(4, `absolute bottom-[1.5%] left-[47.6%] ${buttonSizes.smallSquare} rounded-xl flex items-center justify-center`)}
+          onClick={() => handleButtonClick(4)}
           disabled={isLoading}
         >
-          <span className={`${fontSize.medium} font-bold`}>17</span>
+          <span className={`${fontSize.medium} font-bold`}>4</span>
         </button>
 
-        {/* Button 18 - Bottom right square - Blue */}
         <button
-          className={getButtonClassName(18, `absolute bottom-[1.3%] right-[21%] ${buttonSizes.smallSquare} rounded-xl flex items-center justify-center`)}
-          onClick={() => handleButtonClick(18)}
+          className={getButtonClassName(1, `absolute bottom-[1.3%] left-[21%] ${buttonSizes.smallSquare} rounded-xl flex items-center justify-center`)}
+          onClick={() => handleButtonClick(1)}
           disabled={isLoading}
         >
-          <span className={`${fontSize.medium} font-bold`}>18</span>
+          <span className={`${fontSize.medium} font-bold`}>1</span>
         </button>
 
-        {/* Button 19 - Top right corner square - Blue */}
         <button
-          className={getButtonClassName(19, `absolute top-[2%] right-[6.5%] ${buttonSizes.largeSquare} rounded-xl flex items-center justify-center`)}
-          onClick={() => handleButtonClick(19)}
+          className={getButtonClassName(0, `absolute top-[56.3%] left-[0.9%] ${buttonSizes.smallSquare} rounded-xl flex items-center justify-center`)}
+          onClick={() => handleButtonClick(0)}
           disabled={isLoading}
         >
-          <span className={`${fontSize.medium} font-bold`}>19</span>
+          <span className={`${fontSize.medium} font-bold`}>0</span>
+        </button>
+
+        <button
+          className={getButtonClassName(13, `absolute bottom-[6%] left-[33%] ${buttonSizes.wideRect} rounded-xl flex items-center justify-center`)}
+          onClick={() => handleButtonClick(13)}
+          disabled={isLoading}
+        >
+          <span className={`${fontSize.medium} font-bold`}>13</span>
+        </button>
+
+        <button
+          className={getButtonClassName(5, `absolute bottom-[36.3%] right-[47.5%] ${buttonSizes.smallSquare} rounded-xl flex items-center justify-center`)}
+          onClick={() => handleButtonClick(5)}
+          disabled={isLoading}
+        >
+          <span className={`${fontSize.medium} font-bold`}>5</span>
+        </button>
+
+        <button
+          className={getButtonClassName(8, `absolute bottom-[1.3%] right-[21%] ${buttonSizes.smallSquare} rounded-xl flex items-center justify-center`)}
+          onClick={() => handleButtonClick(8)}
+          disabled={isLoading}
+        >
+          <span className={`${fontSize.medium} font-bold`}>8</span>
         </button>
 
 
         {/* Score display - Smoky dark glass effect */}
         <div className="absolute top-[43%] left-1/2 transform -translate-x-1/2 -translate-y-1/2 bg-black bg-opacity-15 px-12 py-8 rounded-xl border-0 shadow-lg min-w-[400px] backdrop-blur-lg">
-          <div className="text-[#ff4d4d] text-3xl uppercase tracking-wider mb-5 text-center font-bold text-shadow-lg">Estimated Score</div>
+          <div className="text-3xl uppercase tracking-wider mb-5 text-center font-bold text-shadow-lg" style={{ color: "var(--theme-accent)" }}>Estimated Score</div>
           <div className="text-white text-9xl font-bold text-center tracking-wider text-shadow-lg drop-shadow-lg">{estimatedScore}</div>
         </div>
 
         {/* Integrated Control Panel */}
-        <div className={`absolute left-1/2 transform -translate-x-1/2 z-50 bg-black/80 backdrop-blur-xl rounded-2xl p-6 w-[90%] max-w-[600px] border border-[#333333] shadow-2xl ${
-          isHalfScreen ? '-top-70' : 'top-5'
-        }`}>
+        <div
+          className={`absolute left-1/2 z-50 w-[90%] max-w-[600px] -translate-x-1/2 transform rounded-2xl border border-[#333333] bg-black/80 p-6 shadow-2xl backdrop-blur-xl ${
+            isHalfScreen ? "top-4" : "top-6 sm:top-8"
+          }`}
+        >
           <div className="flex flex-col gap-4">
             {/* Top Section: Sequence Display and Plan Selection */}
             <div className="space-y-3">
@@ -677,30 +701,70 @@ export default function Playmat() {
               </div>
               <div className="flex items-center gap-4">
                 <div className="flex-1">
-                  <select
-                    value={selectedPlanId || ''}
-                    onChange={(e: React.ChangeEvent<HTMLSelectElement>) => {
-                      const planId = parseInt(e.target.value);
-                      setSelectedPlanId(planId);
-                    }}
-                    className="w-full bg-[#121212] text-white px-4 py-3 rounded-xl border border-[#333333] focus:outline-none focus:border-white text-lg appearance-none cursor-pointer hover:bg-[#1a1a1a]"
-                    style={{
-                      WebkitAppearance: 'none',
-                      MozAppearance: 'none',
-                      backgroundImage: 'url("data:image/svg+xml;charset=US-ASCII,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22292.4%22%20height%3D%22292.4%22%3E%3Cpath%20fill%3D%22%23FFFFFF%22%20d%3D%22M287%2069.4a17.6%2017.6%200%200%200-13-5.4H18.4c-5%200-9.3%201.8-12.9%205.4A17.6%2017.6%200%200%200%200%2082.2c0%205%201.8%209.3%205.4%2012.9l128%20127.9c3.6%203.6%207.8%205.4%2012.8%205.4s9.2-1.8%2012.8-5.4L287%2095c3.5-3.5%205.4-7.8%205.4-12.8%200-5-1.9-9.2-5.5-12.8z%22%2F%3E%3C%2Fsvg%3E")',
-                      backgroundRepeat: 'no-repeat',
-                      backgroundPosition: 'right 1rem top 50%',
-                      backgroundSize: '0.8rem auto',
-                      paddingRight: '2.5rem'
-                    }}
-                  >
-                    <option value="">Select a plan</option>
-                    {plans.map((plan: PlanSequence) => (
-                      <option key={plan.id} value={plan.id}>
-                        Plan {plan.id} - {plan.description}
-                      </option>
-                    ))}
-                  </select>
+                  <Popover.Root open={planMenuOpen} onOpenChange={setPlanMenuOpen}>
+                    <Popover.Trigger asChild>
+                      <button
+                        type="button"
+                        className="w-full flex items-center justify-between bg-[#121212] text-white px-4 py-3 rounded-xl border border-[#333333] focus:outline-none focus:ring-2 text-lg text-left cursor-pointer hover:bg-[#1a1a1a] transition-colors"
+                        style={{ outlineColor: "var(--theme-accent)" }}
+                        aria-haspopup="listbox"
+                        aria-expanded={planMenuOpen}
+                      >
+                        <span>
+                          {selectedPlanId
+                            ? (() => {
+                                const p = plans.find((pl) => pl.id === selectedPlanId);
+                                return p
+                                  ? `Plan ${p.id} — ${p.description}`
+                                  : "Select a plan";
+                              })()
+                            : "Select a plan"}
+                        </span>
+                        <svg
+                          className="w-5 h-5 shrink-0 text-white/80"
+                          fill="none"
+                          viewBox="0 0 24 24"
+                          stroke="currentColor"
+                          strokeWidth="2"
+                          aria-hidden
+                        >
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                        </svg>
+                      </button>
+                    </Popover.Trigger>
+                    <Popover.Portal>
+                      <Popover.Content
+                        className="z-[200] w-[var(--radix-popover-trigger-width)] max-h-72 overflow-y-auto rounded-xl border border-[#333] bg-[#0a0a0a] p-1 shadow-2xl"
+                        sideOffset={4}
+                        align="start"
+                        onOpenAutoFocus={(e) => e.preventDefault()}
+                      >
+                        {plans.map((plan: PlanSequence) => (
+                          <button
+                            key={plan.id}
+                            type="button"
+                            onClick={() => {
+                              setSelectedPlanId(plan.id);
+                              setPlanMenuOpen(false);
+                            }}
+                            className={clsx(
+                              "w-full text-left px-3 py-3 text-lg rounded-lg transition-colors",
+                              selectedPlanId === plan.id
+                                ? "text-white"
+                                : "text-[#ccc] hover:bg-[#1a1a1a] hover:text-white"
+                            )}
+                            style={
+                              selectedPlanId === plan.id
+                                ? { backgroundColor: "color-mix(in srgb, var(--theme-accent) 35%, #000)" }
+                                : undefined
+                            }
+                          >
+                            Plan {plan.id} — {plan.description}
+                          </button>
+                        ))}
+                      </Popover.Content>
+                    </Popover.Portal>
+                  </Popover.Root>
                 </div>
                 <div>
                   <input
@@ -826,6 +890,7 @@ export default function Playmat() {
             </div>
           </div>
         </div>
+      </div>
       </div>
     </div>
   );

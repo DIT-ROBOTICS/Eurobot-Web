@@ -13,6 +13,10 @@ export default defineConfig({
   },
   server: {
     host: "0.0.0.0",
+    // API writes to data/ (e.g. robot_config.yaml) — do not full-reload the SPA on those changes
+    watch: {
+      ignored: [path.resolve(__dirname, "data")],
+    },
     proxy: {
       "/api": {
         target: "http://localhost:3001",

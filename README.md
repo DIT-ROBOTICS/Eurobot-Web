@@ -74,7 +74,7 @@ This web UI serves as the central command center for Eurobot 2026 robots, offeri
 
 **Robot State:**
 - `/robot/startup/plug` (Bool) - Robot ready signal
-- `/robot/startup/groups_state` (Int32MultiArray) - System group status [MAIN, CAMERA, NAVIGATION, LOCALIZATION]
+- `/robot/startup/groups_state` (Int32MultiArray) - System group status [MAIN, VISION, NAVIGATION, LOCALIZATION]
 - `/robot/startup/ideal_score` (Int32) - Fallback score calculation from the main program
 
 **Strategy & Scoring:**

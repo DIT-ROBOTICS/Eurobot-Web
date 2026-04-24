@@ -75,8 +75,8 @@ export async function getButtonStatesAndSequence(): Promise<{ states: Record<num
     console.error('Error fetching button states and sequence:', error);
     // Return default states (all false) and empty sequence in case of error
     return {
-      states: Object.fromEntries([...Array(20).keys()].map(num => [num, false])),
-      sequence: []
+      states: Object.fromEntries([...Array(18).keys()].map((num) => [num, false])),
+      sequence: [],
     };
   }
 }

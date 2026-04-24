@@ -8,10 +8,20 @@
   src: url('/fonts/mstiffhei-hk-ultrabold.woff2') format('woff2');
   font-weight: 100 900;
   font-style: normal;
+  /* swap: show fallback first, then swap in MStiff when file arrives (FOUT) — use preload in index.html to match first paint. */
   font-display: swap;
 }
 
-/* Add theme color variables */
+/* Explicit bold for components that set font-weight: 700 (browser prefers this over the above range). */
+@font-face {
+  font-family: 'MStiffHeiHK';
+  src: url('/fonts/mstiffhei-hk-bold.woff2') format('woff2');
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* Add theme color variables; --theme-accent is set in JS (applyTheme) */
 :root {
   --font-display: 'MStiffHeiHK', ui-sans-serif, system-ui, sans-serif;
   --primary-bg: #0e0e0e;
@@ -20,13 +30,23 @@
   --hover-bg: #2c2c2c;
   --primary-text: #ffffff;
   --secondary-text: #e0e0e0;
-  --accent-text: #ff4d4d;
+  --theme-accent: #e64545;
+  --accent-text: var(--theme-accent);
   --success-color: #ffffff;
   --warning-color: #ffb74d;
   --error-color: #f44336;
   --info-color: #e0e0e0;
-  --highlight-color: #d32f2f;
+  --highlight-color: var(--theme-accent);
   --border-color: #333333;
+  --progress-bar-color: var(--theme-accent);
+  /* App shell: main is full-bleed; top/bottom nav floats above — scroll regions use as safe padding */
+  --app-chrome-pad-top: 8.5rem;
+  --app-chrome-pad-bottom: 14.5rem;
+}
+
+/* Prioritize horizontal drag for native sliders; App.tsx also skips panel swipe if touch starts on range */
+input[type="range"] {
+  touch-action: pan-x;
 }
 
 @theme inline {
@@ -136,6 +156,376 @@
   --sidebar-ring: oklch(0.556 0 0);
 }
 
+@layer components {
+  .bg-theme-accent {
+    background-color: var(--theme-accent);
+  }
+  .text-theme-accent {
+    color: var(--theme-accent);
+  }
+  .border-theme-accent {
+    border-color: var(--theme-accent);
+  }
+
+  /** App nav: inactive panel dots, hover tied to --theme-accent */
+  .app-nav-dots-idle {
+    background-color: #2c2c2c;
+  }
+  .app-nav-dots-idle:hover {
+    background-color: color-mix(in srgb, var(--theme-accent) 50%, #2c2c2c);
+  }
+
+  .control-btn.control-btn-ghost-theme {
+    background: #2a2a2a;
+    border: 1px solid color-mix(in srgb, var(--theme-accent) 40%, transparent);
+    color: var(--theme-accent);
+  }
+  .control-btn.control-btn-ghost-theme:hover {
+    background: color-mix(in srgb, var(--theme-accent) 12%, transparent);
+  }
+
+  :root {
+    --font-ui: system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans", "Noto Sans TC", "PingFang TC",
+      "Microsoft JhengHei", sans-serif;
+  }
+
+  /* Control tab: line up with Robot Status (larger copy, no aggressive heading reset — StatusPanel keeps text-4xl) */
+  .control-panel {
+    font-family: var(--font-ui);
+    font-size: 1.35rem;
+    line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  @media (min-width: 1280px) {
+    .control-panel {
+      font-size: 1.45rem; /* body copy ~23px on wide layouts */
+    }
+  }
+
+  .control-panel h3 {
+    font-size: 2.4rem !important;
+  }
+
+  @media (min-width: 1280px) {
+    .control-panel h3 {
+      font-size: 2.55rem !important;
+    }
+  }
+
+  .control-panel .control-hint {
+    font-size: 1.04em;
+  }
+
+  .control-panel .control-hint :where(.control-code),
+  .control-panel .control-hint code {
+    font-size: 0.98em;
+  }
+
+  .control-panel-eyebrow {
+    font-size: 0.6875rem;
+    font-weight: 600;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: #6b6b6b;
+    margin: 0 0 0.5rem 0;
+  }
+
+  .control-panel-hero {
+    font-family: var(--font-display, var(--font-ui));
+    font-size: 1.625rem;
+    font-weight: 700;
+    line-height: 1.2;
+    letter-spacing: 0.03em;
+    color: var(--primary-text, #fff);
+    margin: 0;
+  }
+
+  @media (min-width: 768px) {
+    .control-panel-hero {
+      font-size: 1.875rem;
+    }
+  }
+
+  .control-section {
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 0.75rem;
+    background: linear-gradient(165deg, #151515 0%, #111 100%);
+    padding: 1rem 1.25rem 1.25rem;
+  }
+
+  .control-section-title {
+    font-size: 0.75rem;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: color-mix(in srgb, var(--theme-accent) 90%, #fff 10%);
+    margin: 0 0 0.875rem 0;
+    padding-bottom: 0.625rem;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  }
+
+  .control-hint {
+    font-size: 0.9em;
+    line-height: 1.5;
+    color: #8a8a8a;
+    margin: 0 0 1rem 0;
+  }
+
+  .control-hint code,
+  .control-hint :where(.control-code) {
+    font-size: 0.9em;
+    font-family: ui-monospace, "Cascadia Code", "SFMono-Regular", Menlo, Consolas, monospace;
+    color: #b8b8b8;
+    background: rgba(255, 255, 255, 0.04);
+    padding: 0.12em 0.4em;
+    border-radius: 0.25rem;
+  }
+
+  .control-input,
+  .control-input[type] {
+    font: inherit;
+    color: #f0f0f0;
+    background: #1c1c1c;
+    border: 1px solid #353535;
+    border-radius: 0.5rem;
+    padding: 0.65rem 0.9rem;
+    min-height: 3.25rem;
+    width: 100%;
+    max-width: 20rem;
+    transition: border-color 0.15s, box-shadow 0.15s;
+  }
+
+  .control-panel .control-input,
+  .control-panel .control-input[type] {
+    min-height: 3.75rem;
+    padding: 0.9rem 1.25rem;
+    font-size: 1.35rem;
+    line-height: 1.45;
+  }
+
+  @media (min-width: 1280px) {
+    .control-panel .control-input,
+    .control-panel .control-input[type] {
+      min-height: 4rem;
+      font-size: 1.45rem;
+    }
+  }
+
+  .control-panel .control-input::placeholder,
+  .control-panel .control-input[type]::placeholder {
+    font-size: 1em;
+    opacity: 0.55;
+  }
+
+  .control-input:hover {
+    border-color: #4a4a4a;
+  }
+
+  .control-input:focus {
+    outline: none;
+    border-color: var(--theme-accent);
+    box-shadow: 0 0 0 1px color-mix(in srgb, var(--theme-accent) 45%, transparent);
+  }
+
+  .control-input select,
+  select.control-input {
+    cursor: pointer;
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6' fill='none'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%23a0a0a0' stroke-width='1.5' stroke-linecap='round'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 0.75rem center;
+    padding-right: 2rem;
+  }
+
+  .control-input--wide {
+    max-width: 100%;
+  }
+
+  .control-panel input[type="file"] {
+    font-size: 1.35rem;
+  }
+
+  @media (min-width: 1280px) {
+    .control-panel input[type="file"] {
+      font-size: 1.45rem;
+    }
+  }
+
+  /* ColorPickerPanel: rainbow hue strip (htmlcolorcodes.com–style) */
+  .control-hue-slider {
+    -webkit-appearance: none;
+    appearance: none;
+    --hue-grad: linear-gradient(90deg, #f00, #ff0, #0f0, #0ff, #00f, #f0f, #f00);
+    background: transparent;
+  }
+
+  .control-hue-slider::-webkit-slider-runnable-track {
+    height: 0.5rem;
+    border-radius: 0.4rem;
+    background: var(--hue-grad);
+  }
+
+  .control-hue-slider::-moz-range-track {
+    height: 0.5rem;
+    border-radius: 0.4rem;
+    background: var(--hue-grad);
+  }
+
+  .control-hue-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 1.1rem;
+    height: 1.1rem;
+    margin-top: -0.35rem;
+    border-radius: 50%;
+    background: #fff;
+    border: 2px solid rgba(0, 0, 0, 0.2);
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+    cursor: pointer;
+  }
+
+  .control-hue-slider::-moz-range-thumb {
+    width: 1.1rem;
+    height: 1.1rem;
+    border-radius: 50%;
+    background: #fff;
+    border: 2px solid rgba(0, 0, 0, 0.2);
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+    cursor: pointer;
+  }
+
+  .control-label {
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+    color: #e0e0e0;
+    font-size: 1em;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+  }
+
+  .control-panel .control-label {
+    font-size: 1.05em;
+  }
+
+  .control-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font: inherit;
+    font-weight: 600;
+    font-size: 1.0625rem;
+    line-height: 1.2;
+    padding: 0.7rem 1.25rem;
+    min-height: 3.5rem;
+    border-radius: 0.5rem;
+    border: 1px solid transparent;
+    color: #eee;
+    background: #2a2a2a;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+    user-select: none;
+    touch-action: manipulation;
+    transition:
+      background 0.15s,
+      border-color 0.15s,
+      opacity 0.15s,
+      filter 0.1s,
+      transform 0.1s ease;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .control-btn {
+      transition:
+        background 0.15s,
+        border-color 0.15s,
+        opacity 0.15s;
+    }
+  }
+
+  .control-btn:focus-visible {
+    outline: 2px solid rgba(255, 255, 255, 0.3);
+    outline-offset: 2px;
+  }
+
+  .control-btn:hover {
+    background: #343434;
+  }
+
+  .control-btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+
+  .control-btn:not(:disabled):active {
+    transform: scale(0.97);
+    filter: brightness(0.92);
+  }
+
+  .control-btn:disabled:active {
+    transform: none;
+    filter: none;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .control-btn:not(:disabled):active {
+      transform: none;
+      filter: none;
+    }
+  }
+
+  .control-btn-primary {
+    color: #fff;
+    background: var(--theme-accent);
+    border-color: color-mix(in srgb, var(--theme-accent) 50%, #000 50%);
+  }
+
+  .control-btn-primary:hover {
+    filter: brightness(1.05);
+  }
+
+  .control-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    background: #1a1a1a;
+    border: 1px solid #3a3a3a;
+    border-radius: 0.5rem;
+    padding: 0.45rem 0.7rem 0.45rem 0.9rem;
+    font-size: 0.95em;
+    font-family: ui-monospace, "Cascadia Code", Menlo, Consolas, monospace;
+    color: #e8e8e8;
+  }
+
+  .control-panel .control-chip {
+    font-size: 1.05em;
+  }
+
+  .control-panel .control-btn {
+    font-size: 1.2rem;
+    min-height: 3.75rem;
+  }
+
+  @media (min-width: 1280px) {
+    .control-panel .control-btn {
+      font-size: 1.3rem;
+      min-height: 3.9rem;
+    }
+  }
+
+  .control-grid-2 {
+    display: grid;
+    gap: 0.75rem 1rem;
+  }
+
+  @media (min-width: 640px) {
+    .control-grid-2 {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+  }
+}
+
 @layer base {
   * {
     @apply border-border outline-ring/50;
@@ -159,5 +549,117 @@
     font-family: var(--font-display);
     letter-spacing: 0.05em;
     font-size: 140%;
+  }
+}
+
+/* Sponsors: preview cross-fade, fullscreen glass float cards (status) */
+/* No filter: blur — it repaints a large box every frame and janks the WebGL iframe. */
+@keyframes sponsor-card-in {
+  from {
+    opacity: 0;
+    transform: scale(0.96) translate3d(0, 0.2rem, 0);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translate3d(0, 0, 0);
+  }
+}
+
+.sponsor-card-slide {
+  transform: translateZ(0);
+  animation: sponsor-card-in 0.38s cubic-bezier(0.22, 0.8, 0.28, 1) both;
+}
+
+/* iOS-like: from ~preview-scale; smooth decel; no harsh pop at edges */
+@keyframes sponsor-open-hero {
+  from {
+    transform: scale(0.18) translate3d(0, 0, 0);
+    opacity: 0;
+  }
+  55% {
+    opacity: 1;
+  }
+  to {
+    transform: scale(1) translate3d(0, 0, 0);
+    opacity: 1;
+  }
+}
+
+.sponsor-ov-surface {
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+  transform: translateZ(0);
+  will-change: transform, opacity;
+  /* Strong inset shadow is on .sponsor-ov-vig so it does not scale = no “frame” edge. */
+  animation: sponsor-open-hero 0.64s cubic-bezier(0.32, 0.72, 0, 1) forwards;
+}
+
+/* Fades in after the hero has expanded — avoids a growing dark “border”. */
+.sponsor-ov-vig {
+  z-index: 3;
+  opacity: 0;
+  animation: sponsor-ov-vig 0.52s 0.24s cubic-bezier(0.25, 0.1, 0.2, 1) forwards;
+}
+
+@keyframes sponsor-ov-vig {
+  to {
+    opacity: 1;
+  }
+}
+
+/* Stagger: --st on wrapper; decode class triggers opacity transition on pixels (network/cache). */
+.sponsor-ov-asset {
+  --st: 0;
+  position: absolute;
+  inset: 0;
+  display: block;
+  pointer-events: none;
+}
+
+.sponsor-ov-asset__img {
+  opacity: 0;
+  transition: opacity 0.48s cubic-bezier(0.32, 0.72, 0, 1);
+  transition-delay: calc(0.04s + (var(--st) * 40ms));
+}
+
+.sponsor-ov-asset__img--decode {
+  opacity: 1;
+}
+
+.sponsor-ov--exit {
+  animation: sponsor-ov-fade 0.28s ease-out forwards;
+}
+
+@keyframes sponsor-ov-fade {
+  to {
+    opacity: 0;
+  }
+}
+
+/* Fullscreen sponsor: single canvas for stars (see SponsorFullscreenOverlay). */
+.sponsor-ov-stars {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sponsor-card-slide,
+  .sponsor-ov-surface,
+  .sponsor-ov--exit {
+    animation: none;
+  }
+  .sponsor-ov-surface {
+    transform: none;
+    opacity: 1;
+  }
+  .sponsor-ov-vig {
+    animation: none;
+    opacity: 1;
+  }
+  .sponsor-ov-asset__img,
+  .sponsor-ov-asset__img--decode {
+    opacity: 1;
+    transition: none;
   }
 }

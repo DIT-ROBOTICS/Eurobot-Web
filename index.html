@@ -4,7 +4,15 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/dit.png" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Eurobot 2026 Web</title>
+    <!-- Early fetch; reduces FOUT when @font-face uses font-display: swap (see index.css) -->
+    <link
+      rel="preload"
+      href="/fonts/mstiffhei-hk-ultrabold.woff2"
+      as="font"
+      type="font/woff2"
+      crossorigin
+    />
+    <title>Eurobot Web</title>
     <script src="/lib/roslib.min.js"></script>
   </head>
   <body>
