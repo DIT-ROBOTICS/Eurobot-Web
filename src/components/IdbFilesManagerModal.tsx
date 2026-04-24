@@ -270,7 +270,7 @@ export function IdbFilesManagerModal({ open, onClose }: Props) {
           }
           okN += 1;
         }
-        if (errs.length > 0) console.warn("Sponsor upload skipped:", errs);
+        if (errs.length > 0) console.warn(`Sponsor upload skipped: ${errs.length} file(s)`);
         if (okN > 0) notifySponsorUpdated();
         setMsg(uploadSummary(okN, errs, "file(s)", "No supported sponsor files found. Use PNG, SVG, or WebP."));
       } else {
@@ -294,7 +294,7 @@ export function IdbFilesManagerModal({ open, onClose }: Props) {
           if (okN === 0) setActiveGlbId(id);
           okN += 1;
         }
-        if (errs.length > 0) console.warn("GLB upload skipped:", errs);
+        if (errs.length > 0) console.warn(`GLB upload skipped: ${errs.length} file(s)`);
         if (okN > 0) notifyGlbUpdated();
         setMsg(uploadSummary(okN, errs, "model(s)", "No supported GLB files found. Switch tabs if you are uploading sponsor logos."));
       }

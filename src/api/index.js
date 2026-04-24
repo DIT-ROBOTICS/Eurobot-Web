@@ -55,9 +55,6 @@ const DEFAULT_VALUES = {
   sima_plan_code: 1
 };
 
-console.log('Rival params path:', rivalParamsPath);
-console.log('Button states path:', buttonStatesPath);
-console.log('SIMA JSON path:', simaJSONPath);
 
 // Global YAML options for consistent formatting
 const yamlOptions = {
@@ -165,7 +162,6 @@ router.get('/rival-radius', (req, res) => {
 router.post('/rival-radius', (req, res) => {
   try {
     const { radius } = req.body;
-    console.log('Update rival radius API called with:', req.body);
 
     if (radius === undefined || isNaN(radius)) {
       return res.status(400).json({ 
@@ -176,7 +172,6 @@ router.post('/rival-radius', (req, res) => {
 
     // Ensure the radius is within reasonable bounds (0.0m to 0.5m)
     const validRadius = Math.max(0.0, Math.min(0.5, parseFloat(radius)));
-    console.log('Validated radius:', validRadius + 'm');
 
     // Convert to float format for YAML
     const yamlRadius = formatFloatForYaml(validRadius);
@@ -194,7 +189,6 @@ router.post('/rival-radius', (req, res) => {
 
     if (fs.existsSync(rivalParamsPath)) {
       // Read existing file
-      console.log('Reading YAML content:');
       const fileContent = fs.readFileSync(rivalParamsPath, 'utf8');
       
       try {
@@ -203,8 +197,6 @@ router.post('/rival-radius', (req, res) => {
       } catch (parseError) {
         console.warn(`Could not parse existing YAML: ${parseError.message}`);
       }
-    } else {
-      console.log('YAML file does not exist, will create new file');
     }
     
     // Update the radius value
@@ -220,11 +212,9 @@ router.post('/rival-radius', (req, res) => {
     }
 
     // Write the updated configuration back to the file
-    console.log('Writing YAML content:', data);
     let yamlContent = yaml.dump(data, yamlOptions);
     yamlContent = yamlContent.replace(/(rival_inscribed_radius|dock_rival_radius): (\d+)$/gm, '$1: $2.0');
     fs.writeFileSync(rivalParamsPath, yamlContent);
-    console.log('YAML file updated successfully');
 
     // Format radius for response
     const formattedRadius = formatFloatForJSON(validRadius);
@@ -322,7 +312,6 @@ router.get('/dock-rival-params', (req, res) => {
 router.post('/dock-rival-params', (req, res) => {
   try {
     const { radius, degree } = req.body;
-    console.log('Update dock rival parameters API called with:', req.body);
 
     if ((radius === undefined || isNaN(radius)) && (degree === undefined || isNaN(degree))) {
       return res.status(400).json({ 
@@ -338,8 +327,6 @@ router.post('/dock-rival-params', (req, res) => {
     // Format radius for YAML
     const yamlRadius = formatFloatForYaml(validRadius);
     
-    console.log(`Validated dock rival params: radius=${yamlRadius}m, degree=${validDegree}°`);
-
     // Check if file exists, create a default if not
     let data = { 
       nav_rival_parameters: { 
@@ -353,7 +340,6 @@ router.post('/dock-rival-params', (req, res) => {
 
     if (fs.existsSync(rivalParamsPath)) {
       // Read existing file
-      console.log('Reading rival_params.yaml content');
       try {
         const fileContent = fs.readFileSync(rivalParamsPath, 'utf8');
         const loadedData = yaml.load(fileContent);
@@ -367,8 +353,6 @@ router.post('/dock-rival-params', (req, res) => {
         console.warn(`Could not parse existing YAML: ${parseError.message}`);
       }
     } else {
-      console.log('rival_params.yaml file does not exist, will create new file');
-      
       // Ensure the directory exists
       const dir = path.dirname(rivalParamsPath);
       if (!fs.existsSync(dir)) {
@@ -381,11 +365,9 @@ router.post('/dock-rival-params', (req, res) => {
     data.dock_rival_parameters.dock_rival_degree = validDegree;
 
     // Write the updated configuration back to the file
-    console.log('Writing YAML content:', data);
     let yamlContent = yaml.dump(data, yamlOptions);
     yamlContent = yamlContent.replace(/(rival_inscribed_radius|dock_rival_radius): (\d+)$/gm, '$1: $2.0');
     fs.writeFileSync(rivalParamsPath, yamlContent);
-    console.log('YAML file updated successfully');
 
     // Format radius for response
     const formattedRadius = formatFloatForJSON(validRadius);
@@ -505,7 +487,6 @@ router.get('/nav-params', (req, res) => {
 router.post('/nav-params', (req, res) => {
   try {
     const { profile, linearVelocity, angularVelocity } = req.body;
-    console.log('Update navigation parameters API called with:', req.body);
 
     if (!profile || !navProfiles[profile]) {
       return res.status(400).json({ 
@@ -541,8 +522,6 @@ router.post('/nav-params', (req, res) => {
     const yamlLinear = formatFloatForYaml(validLinearVelocity);
     const yamlAngular = formatFloatForYaml(validAngularVelocity);
     
-    console.log(`Validated nav params: profile=${profile}, linear=${yamlLinear}, angular=${yamlAngular}`);
-
     // Default data structure
     let data = { 
       robot_parameters: { 
@@ -553,7 +532,6 @@ router.post('/nav-params', (req, res) => {
 
     if (fs.existsSync(profilePath)) {
       // Read existing file
-      console.log(`Reading ${profile} profile YAML content`);
       const fileContent = fs.readFileSync(profilePath, 'utf8');
       
       try {
@@ -562,8 +540,6 @@ router.post('/nav-params', (req, res) => {
       } catch (parseError) {
         console.warn(`Could not parse existing YAML: ${parseError.message}`);
       }
-    } else {
-      console.log(`${profile} profile file does not exist, will create new file`);
     }
     
     // Make sure robot_parameters section exists
@@ -582,11 +558,9 @@ router.post('/nav-params', (req, res) => {
     }
 
     // Write the updated configuration back to the file
-    console.log('Writing navigation YAML content:', data);
     let yamlContent = yaml.dump(data, yamlOptions);
     yamlContent = yamlContent.replace(/(max_linear_velocity|max_angular_velocity): (\d+)$/gm, '$1: $2.0');
     fs.writeFileSync(profilePath, yamlContent);
-    console.log(`${profile} profile file updated successfully`);
 
     // Format for response
     const formattedLinear = validLinearVelocity.toFixed(1);
@@ -655,11 +629,6 @@ router.post('/sima-params', (req, res) => {
   try {
     const { sima_start_time, plan_code } = req.body;
     const simaJSONPath = path.join(dataDir, 'sima.json');
-    
-    console.log('Update SIMA parameters API called with:', {
-      sima_start_time,
-      plan_code,
-    });
 
     // Validate parameters
     if (sima_start_time === undefined || plan_code === undefined) {
@@ -774,10 +743,8 @@ function missionForApiResponse(doc) {
 // GET endpoint to retrieve button states (includes mission in button.json; mission derived from sequence when non-empty)
 router.get('/button-states', (req, res) => {
   try {
-    console.log('Button states API called');
     const doc = readButtonDocument();
     const m = missionForApiResponse(doc);
-    console.log('Button document loaded:', buttonStatesPath);
 
     res.json({
       success: true,
@@ -798,7 +765,6 @@ router.get('/button-states', (req, res) => {
 // POST endpoint: updates states + sequence; overwrites mission fields from derived flat sequence
 router.post('/button-states', (req, res) => {
   try {
-    console.log('Update button states API called with:', req.body);
     const { states, sequence } = req.body;
 
     if (!states || typeof states !== 'object') {
@@ -810,7 +776,6 @@ router.post('/button-states', (req, res) => {
     }
 
     const out = writeButtonDocumentFromPlaymat(states, sequence);
-    console.log('Button document updated (includes pantry/collection in same file)');
 
     res.json({
       success: true,
@@ -1096,4 +1061,4 @@ router.post('/reset-to-defaults', (req, res) => {
   }
 });
 
-export default router; 
+export default router;

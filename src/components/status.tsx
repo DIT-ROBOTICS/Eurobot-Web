@@ -632,8 +632,6 @@ export default function RobotDashboard() {
       switch (paramType) {
         case 'rival': {
           const radiusM = rivalRadius / 100;
-          console.log(`Sending radius update request: ${radiusM}m`);
-          
           response = await fetch('/api/rival-radius', {
             method: 'POST',
             headers: {
@@ -645,8 +643,6 @@ export default function RobotDashboard() {
         }
         case 'dock': {
           const radiusM = dockRivalRadius / 100;
-          console.log(`Sending dock rival params update: radius=${radiusM}m, degree=${dockRivalDegree}`);
-          
           response = await fetch('/api/dock-rival-params', {
             method: 'POST',
             headers: {
@@ -660,8 +656,6 @@ export default function RobotDashboard() {
           break;
         }
         case 'nav': {
-          console.log(`Sending navigation params update: profile=${navProfile}, linear=${navLinearVelocity}, angular=${navAngularVelocity}`);
-          
           response = await fetch('/api/nav-params', {
             method: 'POST',
             headers: {
@@ -676,8 +670,6 @@ export default function RobotDashboard() {
           break;
         }
         case 'sima': {
-          console.log(`Sending SIMA params update: offset=${simaStartTime}, planCode=${planCode}`);
-          
           response = await fetch('/api/sima-params', {
             method: 'POST',
             headers: {

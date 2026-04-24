@@ -67,14 +67,14 @@ export function useRosConnection() {
       
       if (reconnectAttempts < maxReconnectAttempts) {
         reconnectAttempts++;
-        console.log(`Attempting to reconnect to ROS (attempt ${reconnectAttempts}/${maxReconnectAttempts})...`);
-        
         reconnectTimer = setTimeout(() => {
           reconnectTimer = null;
           connectToROS();
         }, reconnectInterval);
       } else {
-        console.warn('Maximum reconnection attempts reached. Please refresh the page.');
+        if (!import.meta.env.DEV) {
+          console.warn('Maximum reconnection attempts reached. Please refresh the page.');
+        }
       }
     };
 
@@ -111,7 +111,6 @@ export function useRosConnection() {
 
         // ROS connection event handlers
         ros.on('connection', () => {
-          console.log('Connected to ROS2 bridge');
           const state = {
             ros,
             connected: true,
@@ -122,8 +121,7 @@ export function useRosConnection() {
           reconnectAttempts = 0;
         });
 
-        ros.on('error', (error: any) => {
-          console.error('Error connecting to ROS2 bridge:', error);
+        ros.on('error', () => {
           if (rosInstance === ros) rosInstance = null;
           const state = {
             ros: rosInstance,
@@ -136,7 +134,6 @@ export function useRosConnection() {
         });
 
         ros.on('close', () => {
-          console.log('Connection to ROS2 bridge closed');
           if (rosInstance === ros) rosInstance = null;
           const state = {
             ros: null,
@@ -147,8 +144,7 @@ export function useRosConnection() {
           emitRosState(state);
           attemptReconnect();
         });
-      } catch (error) {
-        console.error('Failed to initialize ROS2 connection:', error);
+      } catch {
         if (rosInstance && !isRosInstanceOpen(rosInstance)) rosInstance = null;
         const state = { ros: null, connected: false, url: rosUrl };
         if (!disposed) setConnectionState(state);

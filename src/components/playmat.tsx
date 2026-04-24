@@ -423,7 +423,6 @@ export default function Playmat() {
       // Clean up existing service server if connection is lost
       if (serviceServerRef.current) {
         try {
-          console.log('Cleaning up service server due to connection loss...');
           serviceServerRef.current.unadvertise();
           serviceServerRef.current = null;
         } catch (e) {
@@ -441,14 +440,12 @@ export default function Playmat() {
 
     // Check if we already have a service server with the same ROS connection
     if (serviceServerRef.current && rosConnectionRef.current === server.ros) {
-      console.log('Service server already exists and connection is stable');
       return;
     }
 
     // Clean up existing service server if ROS connection changed
     if (serviceServerRef.current) {
       try {
-        console.log('Cleaning up existing service server due to connection change...');
         serviceServerRef.current.unadvertise();
       } catch (e) {
         console.error('Error cleaning up existing service server:', e);
@@ -460,21 +457,17 @@ export default function Playmat() {
 
       // Handle service requests
       server.advertise((request: any, response: any) => {
-        console.log('Service request received:', request);
-        
+        void request;
         // Get current selected plan ID from ref (always up-to-date)
         const planId = selectedPlanIdRef.current || 0;
         response.success = true;
         response.message = planId.toString();
-        
-        console.log(`Service responding with plan ID: ${planId}`);
         return true;
       });
 
       // Store references
       serviceServerRef.current = server;
       rosConnectionRef.current = server.ros;
-      console.log('Service server created successfully: /robot/startup/web_plan');
 
     } catch (error) {
       console.error('Error creating service server:', error);
@@ -484,7 +477,6 @@ export default function Playmat() {
       // Cleanup on unmount only
       if (serviceServerRef.current) {
         try {
-          console.log('Unmounting: Stopping service server...');
           serviceServerRef.current.unadvertise();
           serviceServerRef.current = null;
           rosConnectionRef.current = null;
