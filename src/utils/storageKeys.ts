@@ -11,6 +11,7 @@ export const SAVED_PLANS_KEY = 'savedPlans';
 export const APP_LAYOUT_ACTIVE_PANEL_KEY = 'activePanel';
 export const APP_LAYOUT_VERTICAL_PANEL_KEY = 'verticalPanel';
 export const APP_LAYOUT_IS_HALF_SCREEN_KEY = 'isHalfScreen';
+export const APP_LAYOUT_HALF_SCREEN_EVENT = 'eurobot-layout-half-screen';
 
 export const EUROBOT_GLB_ID_LIST_KEY = 'eurobot-glb-id-list';
 

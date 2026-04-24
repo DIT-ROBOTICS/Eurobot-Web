@@ -3,9 +3,9 @@ import Playmat from "./components/playmat";
 import RobotDashboard from "./components/status";
 import ControlAreas from "./components/control";
 import { RosBridgeFloat } from "./components/RosBridgeFloat";
-import { getStorageItem, setStorageItem } from "./utils/storage";
-import { VscScreenFull, VscScreenNormal, VscChevronUp, VscChevronDown } from "react-icons/vsc";
+import { VscChevronUp, VscChevronDown } from "react-icons/vsc";
 import { MdOutlineFullscreen, MdOutlineFullscreenExit } from "react-icons/md";
+import { APP_LAYOUT_HALF_SCREEN_EVENT, APP_LAYOUT_IS_HALF_SCREEN_KEY } from "./utils/storageKeys";
 // Define a Panel interface to standardize panel components
 interface Panel {
   id: string;
@@ -66,7 +66,7 @@ function App() {
   // State for half screen mode (for dual monitors)
   const [isHalfScreen, setIsHalfScreen] = useState(() => {
     try {
-      const savedValue = localStorage.getItem('isHalfScreen');
+      const savedValue = localStorage.getItem(APP_LAYOUT_IS_HALF_SCREEN_KEY);
       return savedValue === 'true';
     } catch (error) {
       console.warn('Could not load half screen mode setting:', error);
@@ -238,10 +238,11 @@ function App() {
     }
     setIsHalfScreen(value);
     try {
-      localStorage.setItem("isHalfScreen", value.toString());
+      localStorage.setItem(APP_LAYOUT_IS_HALF_SCREEN_KEY, value.toString());
     } catch (error) {
       console.warn("Could not save half screen setting:", error);
     }
+    window.dispatchEvent(new Event(APP_LAYOUT_HALF_SCREEN_EVENT));
   };
 
   useEffect(() => {

@@ -3,6 +3,7 @@ import { DEFAULT_PLAYMAT_BG_ID } from "../assets/playmatBackgrounds";
 import { DEFAULT_THEME_ACCENT, setThemeAccent } from "./applyTheme";
 import {
   APP_LAYOUT_ACTIVE_PANEL_KEY,
+  APP_LAYOUT_HALF_SCREEN_EVENT,
   APP_LAYOUT_IS_HALF_SCREEN_KEY,
   APP_LAYOUT_VERTICAL_PANEL_KEY,
   BMS_HOSTNAME_KEY,
@@ -277,17 +278,18 @@ export async function importConfigBackupFromFile(file: File): Promise<void> {
   const raw = await jf.async("string");
   const m = parseManifest(raw);
   normalizeSimaNamesInManifest(m.localStorage);
-  await clearGlbAndSponsorObjectStores();
 
+  const glbRecords: GlbModelRecord[] = [];
   for (const g of m.glb) {
     const z = zip.file(g.file);
     if (!z) {
       throw new Error("GLB not found in zip: " + g.file);
     }
     const buf = await z.async("arraybuffer");
-    await putGlbModel({ id: g.id, name: g.name, data: buf } satisfies GlbModelRecord);
+    glbRecords.push({ id: g.id, name: g.name, data: buf });
   }
 
+  const sponsorRecords: SponsorRecord[] = [];
   for (const s of m.sponsors) {
     const z = zip.file(s.file);
     if (!z) {
@@ -295,17 +297,25 @@ export async function importConfigBackupFromFile(file: File): Promise<void> {
     }
     if (s.kind === "svg") {
       const text = await z.async("string");
-      await putSponsor({ id: s.id, name: s.name, kind: "svg", data: text, order: s.order } satisfies SponsorRecord);
+      sponsorRecords.push({ id: s.id, name: s.name, kind: "svg", data: text, order: s.order });
     } else {
       const buf = await z.async("arraybuffer");
-      await putSponsor({
+      sponsorRecords.push({
         id: s.id,
         name: s.name,
         kind: s.kind,
         data: buf,
         order: s.order,
-      } satisfies SponsorRecord);
+      });
     }
+  }
+
+  await clearGlbAndSponsorObjectStores();
+  for (const g of glbRecords) {
+    await putGlbModel(g);
+  }
+  for (const s of sponsorRecords) {
+    await putSponsor(s);
   }
   setLocalFromManifest(m);
   const active = m.localStorage[ROBOT_GLB_ACTIVE_ID_KEY] ?? null;
@@ -329,6 +339,7 @@ export async function importConfigBackupFromFile(file: File): Promise<void> {
   window.dispatchEvent(new Event("eurobot-bms-hostname"));
   window.dispatchEvent(new Event("eurobot-sima-names-updated"));
   window.dispatchEvent(new Event("eurobot-playmat-bg"));
+  window.dispatchEvent(new Event(APP_LAYOUT_HALF_SCREEN_EVENT));
   window.dispatchEvent(new Event("eurobot-theme-refresh"));
 }
 
@@ -352,5 +363,6 @@ export async function resetAllDataToFactoryDefaults(): Promise<void> {
   window.dispatchEvent(new Event("eurobot-bms-hostname"));
   window.dispatchEvent(new Event("eurobot-sima-names-updated"));
   window.dispatchEvent(new Event("eurobot-playmat-bg"));
+  window.dispatchEvent(new Event(APP_LAYOUT_HALF_SCREEN_EVENT));
   window.dispatchEvent(new Event("eurobot-theme-refresh"));
 }

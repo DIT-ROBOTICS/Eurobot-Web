@@ -37,7 +37,7 @@ export function isLikelySvgText(s: string, maxLen = 8_000_000): boolean {
   if (!t.includes("<") || t.length < 4) return false;
   if (!SVG_START.test(t) && !/<svg/i.test(s.slice(0, Math.min(2_000, s.length)))) return false;
   const low = t.toLowerCase();
-  if (low.includes("<script") || /on\w+\s*=/.test(low)) {
+  if (low.includes("<script") || /[\s<]on[a-z0-9_-]+\s*=/i.test(t)) {
     return false; // no scripts / inline handlers in upload
   }
   if (!/<\s*svg[\s>]/i.test(s.slice(0, Math.min(4_000, s.length)))) return false;

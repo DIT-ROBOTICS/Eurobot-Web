@@ -10,6 +10,20 @@ interface RosConnectionState {
 // Singleton instance for the ROS connection
 let rosInstance: any = null;
 let rosSubscribers = 0;
+const ROS_STATE_EVENT = 'eurobot-ros-connection-state';
+
+function emitRosState(state: RosConnectionState): void {
+  if (typeof window === 'undefined') return;
+  window.dispatchEvent(new CustomEvent<RosConnectionState>(ROS_STATE_EVENT, { detail: state }));
+}
+
+function isRosInstanceOpen(ros: any): boolean {
+  return ros?.isConnected === true || ros?.socket?.readyState === WebSocket.OPEN;
+}
+
+function isRosInstanceConnecting(ros: any): boolean {
+  return ros?.socket?.readyState === WebSocket.CONNECTING;
+}
 
 export function useRosConnection() {
   const [connectionState, setConnectionState] = useState<RosConnectionState>({
@@ -33,11 +47,19 @@ export function useRosConnection() {
 
     let reconnectTimer: any = null;
     let reconnectAttempts = 0;
+    let disposed = false;
     const maxReconnectAttempts = 10;
     const reconnectInterval = 3000;
 
+    const onSharedState = (event: Event) => {
+      const detail = (event as CustomEvent<RosConnectionState>).detail;
+      if (detail) setConnectionState(detail);
+    };
+    window.addEventListener(ROS_STATE_EVENT, onSharedState);
+
     // Function to attempt reconnection
     const attemptReconnect = () => {
+      if (rosSubscribers <= 0) return;
       if (reconnectTimer) {
         clearTimeout(reconnectTimer);
         reconnectTimer = null;
@@ -60,12 +82,22 @@ export function useRosConnection() {
     const connectToROS = () => {
       // If we already have a connection, use it
       if (rosInstance) {
-        setConnectionState({
-          ros: rosInstance,
-          connected: true,
-          url: rosUrl
-        });
-        return;
+        if (isRosInstanceOpen(rosInstance) || isRosInstanceConnecting(rosInstance)) {
+          const state = {
+            ros: rosInstance,
+            connected: isRosInstanceOpen(rosInstance),
+            url: rosUrl
+          };
+          if (!disposed) setConnectionState(state);
+          emitRosState(state);
+          return;
+        }
+        try {
+          rosInstance.close?.();
+        } catch {
+          /* */
+        }
+        rosInstance = null;
       }
 
       try {
@@ -80,28 +112,47 @@ export function useRosConnection() {
         // ROS connection event handlers
         ros.on('connection', () => {
           console.log('Connected to ROS2 bridge');
-          setConnectionState({
+          const state = {
             ros,
             connected: true,
             url: rosUrl
-          });
+          };
+          if (!disposed) setConnectionState(state);
+          emitRosState(state);
           reconnectAttempts = 0;
         });
 
         ros.on('error', (error: any) => {
           console.error('Error connecting to ROS2 bridge:', error);
-          setConnectionState((prev: RosConnectionState) => ({ ...prev, connected: false }));
+          if (rosInstance === ros) rosInstance = null;
+          const state = {
+            ros: rosInstance,
+            connected: false,
+            url: rosUrl
+          };
+          if (!disposed) setConnectionState(state);
+          emitRosState(state);
           attemptReconnect();
         });
 
         ros.on('close', () => {
           console.log('Connection to ROS2 bridge closed');
-          setConnectionState((prev: RosConnectionState) => ({ ...prev, connected: false }));
+          if (rosInstance === ros) rosInstance = null;
+          const state = {
+            ros: null,
+            connected: false,
+            url: rosUrl
+          };
+          if (!disposed) setConnectionState(state);
+          emitRosState(state);
           attemptReconnect();
         });
       } catch (error) {
         console.error('Failed to initialize ROS2 connection:', error);
-        setConnectionState((prev: RosConnectionState) => ({ ...prev, connected: false }));
+        if (rosInstance && !isRosInstanceOpen(rosInstance)) rosInstance = null;
+        const state = { ros: null, connected: false, url: rosUrl };
+        if (!disposed) setConnectionState(state);
+        emitRosState(state);
         attemptReconnect();
       }
     };
@@ -117,8 +168,10 @@ export function useRosConnection() {
 
     // Cleanup function
     return () => {
+      disposed = true;
       // Decrement the subscriber count
       rosSubscribers--;
+      window.removeEventListener(ROS_STATE_EVENT, onSharedState);
       
       if (reconnectTimer) {
         clearTimeout(reconnectTimer);
@@ -203,4 +256,4 @@ export function useRosConnection() {
     getServiceServer,
     createPublisher,
   };
-} 
+}

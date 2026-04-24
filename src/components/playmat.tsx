@@ -6,6 +6,7 @@ import { useRosConnection } from "../utils/useRosConnection";
 import { getButtonStatesAndSequence, updateButtonStatesAndSequence } from "../api/fileOperations";
 import { clsx } from "clsx";
 import { validateJsonMissionPlansJson } from "../utils/uploadValidation";
+import { useIsHalfScreen } from "../hooks/useIsHalfScreen";
 
 const MISSION_INDEX_COUNT = 18; // 0-17: pantry 0-9, collection 10-17 (issue #2)
 
@@ -25,8 +26,8 @@ type MigrateResult = { states: Record<number, boolean>; sequence: number[]; chan
 
 function migrateButtonLoad(states: Record<number, boolean | undefined>, sequence: number[]): MigrateResult {
   const keys = Object.keys(states || {}).map(Number);
-  const hasLegacySlots = keys.includes(10) || keys.includes(19) || keys.length > 18;
-  const hasLegacyInSeq = sequence.some((n) => n === 10 || n === 19);
+  const hasLegacySlots = keys.some((n) => n >= MISSION_INDEX_COUNT) || keys.length > MISSION_INDEX_COUNT;
+  const hasLegacyInSeq = sequence.some((n) => n >= MISSION_INDEX_COUNT);
   const isLegacy = hasLegacySlots || hasLegacyInSeq;
 
   if (isLegacy) {
@@ -169,7 +170,7 @@ export default function Playmat() {
   );
   const [planMenuOpen, setPlanMenuOpen] = useState(false);
   const [estimatedScore, setEstimatedScore] = useState(128);
-  const [isHalfScreen, setIsHalfScreen] = useState(false);
+  const isHalfScreen = useIsHalfScreen();
   const { connected, getTopicHandler, getServiceServer } = useRosConnection();
   // For storing button states
   const [toggleStates, setToggleStates] = useState<Record<number, boolean>>(() => defaultMissionButtonStates());
@@ -202,33 +203,15 @@ export default function Playmat() {
     selectedPlanIdRef.current = selectedPlanId;
   }, [selectedPlanId]);
   
-  // Detect half-screen mode
+  // Sync playmat background changes from Control Panel / backup restore.
   useEffect(() => {
-    try {
-      const savedValue = localStorage.getItem('isHalfScreen');
-      setIsHalfScreen(savedValue === 'true');
-    } catch (error) {
-      console.warn('Could not detect half screen mode:', error);
-    }
-    
-    // Listen for changes to half-screen mode
-    const checkHalfScreen = () => {
-      try {
-        const savedValue = localStorage.getItem('isHalfScreen');
-        setIsHalfScreen(savedValue === 'true');
-      } catch (error) {
-        console.warn('Could not detect half screen mode:', error);
-      }
-    };
     const onPlaymat = () => {
       try {
         setPlaymatBgId(localStorage.getItem(PLAYMAT_BG_ID_KEY) || DEFAULT_PLAYMAT_BG_ID);
       } catch { /* */ }
     };
-    window.addEventListener('storage', checkHalfScreen);
     window.addEventListener('eurobot-playmat-bg', onPlaymat);
     return () => {
-      window.removeEventListener('storage', checkHalfScreen);
       window.removeEventListener('eurobot-playmat-bg', onPlaymat);
     };
   }, []);

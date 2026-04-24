@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, memo } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState, memo } from "react";
 import { createPortal } from "react-dom";
 import { clsx } from "clsx";
 import {
@@ -29,6 +29,20 @@ const PREVENT_NAV = (e: React.DragEvent) => {
   e.preventDefault();
   e.stopPropagation();
 };
+
+function uploadSummary(okN: number, errs: string[], okLabel: string, emptyMessage: string): string {
+  if (okN > 0 && errs.length === 0) return `Added ${okN} ${okLabel}.`;
+  if (okN > 0) return `Added ${okN} ${okLabel}. ${errs.length} file(s) skipped.`;
+  if (errs.length > 0) {
+    const sizeN = errs.filter((e) => e.includes("File size not allowed")).length;
+    const typeN = errs.length - sizeN;
+    const parts = [];
+    if (sizeN > 0) parts.push(`${sizeN} too large`);
+    if (typeN > 0) parts.push(`${typeN} unsupported`);
+    return `No files added: ${parts.join(", ")}.`;
+  }
+  return emptyMessage;
+}
 
 type ListRowProps = {
   id: string;
@@ -132,6 +146,7 @@ const IdbListRow = memo(function IdbListRow({
 });
 
 export function IdbFilesManagerModal({ open, onClose }: Props) {
+  const fileInputId = useId();
   const [tab, setTab] = useState<"sponsors" | "glb">("sponsors");
   const [sponsors, setSponsors] = useState<SponsorRecord[]>([]);
   const [glbRows, setGlbRows] = useState<{ id: string; name: string }[]>([]);
@@ -231,7 +246,7 @@ export function IdbFilesManagerModal({ open, onClose }: Props) {
     const arr = Array.from(files);
     if (arr.length === 0) return;
     setBusy(true);
-    setMsg(null);
+    setMsg(`Checking ${arr.length} file(s)…`);
     try {
       if (tab === "sponsors") {
         let order = (await listSponsors()).length;
@@ -246,13 +261,18 @@ export function IdbFilesManagerModal({ open, onClose }: Props) {
           const id = `sp_${Date.now()}_${okN}_${Math.random().toString(16).slice(2)}`;
           const { kind, data } = v.rec;
           const rec: SponsorRecord = { id, name: f.name, kind: kind as ValidatedSponsorKind, data, order: order++ };
-          await putSponsor(rec);
+          try {
+            await putSponsor(rec);
+          } catch (e) {
+            const reason = e instanceof Error ? e.message : String(e);
+            errs.push(`${f.name}: could not save (${reason})`);
+            continue;
+          }
           okN += 1;
         }
+        if (errs.length > 0) console.warn("Sponsor upload skipped:", errs);
         if (okN > 0) notifySponsorUpdated();
-        if (okN > 0 && errs.length === 0) setMsg(`Added ${okN} file(s).`);
-        else if (okN > 0) setMsg(`Added ${okN}. Some skipped: ${errs.join("; ")}`);
-        else if (errs.length) setMsg(errs.slice(0, 3).join(" · ") + (errs.length > 3 ? "…" : ""));
+        setMsg(uploadSummary(okN, errs, "file(s)", "No supported sponsor files found. Use PNG, SVG, or WebP."));
       } else {
         let okN = 0;
         const errs: string[] = [];
@@ -264,14 +284,19 @@ export function IdbFilesManagerModal({ open, onClose }: Props) {
             continue;
           }
           const id = `glb_${Date.now()}_${okN}_${Math.random().toString(16).slice(2)}`;
-          await putGlbModel({ id, name: f.name, data: buf });
+          try {
+            await putGlbModel({ id, name: f.name, data: buf });
+          } catch (e) {
+            const reason = e instanceof Error ? e.message : String(e);
+            errs.push(`${f.name}: could not save (${reason})`);
+            continue;
+          }
           if (okN === 0) setActiveGlbId(id);
           okN += 1;
         }
+        if (errs.length > 0) console.warn("GLB upload skipped:", errs);
         if (okN > 0) notifyGlbUpdated();
-        if (okN > 0 && errs.length === 0) setMsg(`Added ${okN} model(s).`);
-        else if (okN > 0) setMsg(`Added ${okN}. Some skipped: ${errs.join("; ")}`);
-        else if (errs.length) setMsg(errs.slice(0, 3).join(" · ") + (errs.length > 3 ? "…" : ""));
+        setMsg(uploadSummary(okN, errs, "model(s)", "No supported GLB files found. Switch tabs if you are uploading sponsor logos."));
       }
       await load();
     } catch (e) {
@@ -283,9 +308,9 @@ export function IdbFilesManagerModal({ open, onClose }: Props) {
   };
 
   const onFileInput = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const f = e.target.files;
+    const f = e.target.files ? Array.from(e.target.files) : [];
     e.target.value = "";
-    if (f) void ingestFiles(f);
+    if (f.length > 0) void ingestFiles(f);
   };
 
   if (typeof document === "undefined" || !open) return null;
@@ -341,6 +366,7 @@ export function IdbFilesManagerModal({ open, onClose }: Props) {
         <div className="flex min-h-0 flex-1 flex-col">
           <input
             ref={fileInRef}
+            id={fileInputId}
             type="file"
             className="sr-only"
             multiple
@@ -349,7 +375,8 @@ export function IdbFilesManagerModal({ open, onClose }: Props) {
             aria-hidden
             tabIndex={-1}
           />
-          <div
+          <label
+            htmlFor={busy ? undefined : fileInputId}
             className={clsx(
               "m-3 shrink-0 cursor-pointer select-none rounded-xl border-2 border-dashed px-4 py-8 text-center transition sm:mx-4 sm:px-6",
               dropActive ? "border-[var(--theme-accent)] bg-white/[0.04]" : "border-white/15 bg-[#0a0a0a]/80 hover:border-white/25"
@@ -357,7 +384,6 @@ export function IdbFilesManagerModal({ open, onClose }: Props) {
             role="button"
             tabIndex={0}
             aria-label={tab === "sponsors" ? "Drop or click to add sponsor image files" : "Drop or click to add GLB model files"}
-            onClick={() => !busy && fileInRef.current?.click()}
             onKeyDown={(e) => {
               if (e.key === "Enter" || e.key === " ") {
                 e.preventDefault();
@@ -381,13 +407,27 @@ export function IdbFilesManagerModal({ open, onClose }: Props) {
                 ? "Drop PNG, SVG, or WebP here, or click to browse."
                 : "Drop .glb (binary glTF) files here, or click to browse."}
             </p>
-          </div>
+          </label>
           {msg && (
-            <p className="shrink-0 px-4 text-base text-amber-200/95 sm:px-6 sm:text-lg" role="status">
-              {msg}
-            </p>
+            <div className="shrink-0 px-4 pb-3 sm:px-6" role="status" aria-live="polite">
+              <p
+                className={clsx(
+                  "w-full rounded-md py-2 text-center text-base font-semibold leading-snug sm:text-lg",
+                  msg.startsWith("Added")
+                    ? "bg-[#0a2e0a] text-[#6bff6b]"
+                    : "text-theme-accent"
+                )}
+                style={
+                  msg.startsWith("Added")
+                    ? undefined
+                    : { background: "color-mix(in srgb, var(--theme-accent) 14%, #1a0a0a)" }
+                }
+              >
+                {msg}
+              </p>
+            </div>
           )}
-          <div className="min-h-0 flex-1 overflow-y-auto border-t border-white/10 px-1 py-1 sm:px-3 sm:py-2">
+          <div className={clsx("min-h-0 flex-1 overflow-y-auto px-1 py-1 sm:px-3 sm:py-2", list.length > 0 && "border-t border-white/6")}>
             {list.length === 0 ? (
               <p className="p-6 text-center text-lg text-[#5a5a5a] sm:p-8 sm:text-xl">Nothing in this list yet.</p>
             ) : (

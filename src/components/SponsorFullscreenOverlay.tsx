@@ -22,19 +22,25 @@ const SPONSOR_STAR_SPECS: StarSpec[] = (() => {
   return a;
 })();
 
+const MANY_SPONSOR_THRESHOLD = 36;
+const DENSE_STAR_COUNT = 180;
+const NORMAL_STAR_COUNT = SPONSOR_STAR_SPECS.length;
+
 function drawStarField(
   ctx: CanvasRenderingContext2D,
   cssW: number,
   cssH: number,
   tSec: number,
   staticField: boolean,
-  dpr: number
+  dpr: number,
+  starCount: number = NORMAL_STAR_COUNT
 ) {
   const d = Math.max(0.5, dpr);
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
   ctx.setTransform(d, 0, 0, d, 0, 0);
-  for (const s of SPONSOR_STAR_SPECS) {
+  for (let i = 0; i < Math.min(starCount, SPONSOR_STAR_SPECS.length); i++) {
+    const s = SPONSOR_STAR_SPECS[i];
     const cx = s.x * cssW;
     const cy = s.y * cssH;
     let o: number;
@@ -145,10 +151,13 @@ export function SponsorFullscreenOverlay({ records, onClose, openOrigin, closeEx
   const [reduced, setReduced] = useState(getReducedMotion);
   const [vvNudge, setVvNudge] = useState(0);
   const idKey = records.map((r) => r.id).join("|");
+  const denseSponsors = records.length >= MANY_SPONSOR_THRESHOLD;
+  const activeStarCount = denseSponsors ? DENSE_STAR_COUNT : NORMAL_STAR_COUNT;
   const centerRef = useRef<HTMLImageElement>(null);
   const satRefs = useRef<(HTMLImageElement | null)[]>([]);
   const wobblesRef = useRef<SatWobble[]>([]);
   const rafRef = useRef(0);
+  const lastDenseFrameRef = useRef(0);
   const starFieldRef = useRef<HTMLDivElement | null>(null);
   const starCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const star2dRef = useRef<CanvasRenderingContext2D | null>(null);
@@ -191,7 +200,7 @@ export function SponsorFullscreenOverlay({ records, onClose, openOrigin, closeEx
         const ang = base + sweep;
         let rR = ringR;
         let sc = 1;
-        if (w && !reduced) {
+        if (w && !reduced && !denseSponsors) {
           const wobR =
             0.5 * Math.sin(tSec * w.rW1 + w.pR1) + 0.32 * Math.sin(tSec * w.rW2 * 0.85 + w.pR2) + 0.2 * Math.sin(tSec * w.rW1 * 1.9 + w.pR1);
           const rMul = 1 + w.rAmp * wobR;
@@ -207,7 +216,7 @@ export function SponsorFullscreenOverlay({ records, onClose, openOrigin, closeEx
         img.style.maxHeight = `${satSize}px`;
       }
     },
-    [records.length, reduced]
+    [records.length, reduced, denseSponsors]
   );
 
   useEffect(() => {
@@ -258,17 +267,22 @@ export function SponsorFullscreenOverlay({ records, onClose, openOrigin, closeEx
         const w = Math.max(1, wrap.clientWidth);
         const h = Math.max(1, wrap.clientHeight);
         const dpr = syncStarCanvas(c, w, h);
-        drawStarField(ctx, w, h, t0, false, dpr);
+        drawStarField(ctx, w, h, t0, false, dpr, activeStarCount);
       }
     }
     applyOrbit(0, t0);
-  }, [idKey, records.length, reduced, applyOrbit, vvNudge]);
+  }, [idKey, records.length, reduced, applyOrbit, vvNudge, activeStarCount]);
 
   useEffect(() => {
     if (reduced) return;
     if (records.length === 0) return;
 
     const tick = (now: number) => {
+      if (denseSponsors && now - lastDenseFrameRef.current < 33) {
+        rafRef.current = requestAnimationFrame(tick);
+        return;
+      }
+      lastDenseFrameRef.current = now;
       const tSec = now * 0.001;
       const sweep = tSec * ORBIT_RAD_S;
       const wrap = starFieldRef.current;
@@ -282,7 +296,7 @@ export function SponsorFullscreenOverlay({ records, onClose, openOrigin, closeEx
           const w = Math.max(1, wrap.clientWidth);
           const h = Math.max(1, wrap.clientHeight);
           const dpr = syncStarCanvas(c, w, h);
-          drawStarField(ctx, w, h, tSec, false, dpr);
+          drawStarField(ctx, w, h, tSec, false, dpr, activeStarCount);
         }
       }
       applyOrbit(sweep, tSec);
@@ -292,7 +306,7 @@ export function SponsorFullscreenOverlay({ records, onClose, openOrigin, closeEx
     return () => {
       cancelAnimationFrame(rafRef.current);
     };
-  }, [idKey, records.length, reduced, applyOrbit, vvNudge]);
+  }, [idKey, records.length, reduced, applyOrbit, vvNudge, denseSponsors, activeStarCount]);
 
   useLayoutEffect(() => {
     if (!reduced) return;
@@ -308,11 +322,11 @@ export function SponsorFullscreenOverlay({ records, onClose, openOrigin, closeEx
         const w = Math.max(1, wrap.clientWidth);
         const h = Math.max(1, wrap.clientHeight);
         const dpr = syncStarCanvas(c, w, h);
-        drawStarField(ctx, w, h, 0, true, dpr);
+        drawStarField(ctx, w, h, 0, true, dpr, activeStarCount);
       }
     }
     applyOrbit(0, 0);
-  }, [idKey, records.length, reduced, applyOrbit, vvNudge]);
+  }, [idKey, records.length, reduced, applyOrbit, vvNudge, activeStarCount]);
 
   useEffect(() => {
     if (!reduced) return;
@@ -434,7 +448,7 @@ export function SponsorFullscreenOverlay({ records, onClose, openOrigin, closeEx
                   border: "none",
                   outline: "none",
                   background: "transparent",
-                  willChange: reduced ? undefined : "transform",
+                  willChange: reduced || denseSponsors ? undefined : "transform",
                 }}
               />
             </span>

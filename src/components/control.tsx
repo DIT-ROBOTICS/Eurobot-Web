@@ -48,6 +48,11 @@ const THEME_PRESET_HEX = [
   "#E4E4E7",
 ] as const;
 
+type DataNotice = {
+  tone: "info" | "success" | "error";
+  text: string;
+};
+
 export default function ControlAreas() {
   const [themeInput, setThemeInput] = useState(() => getStoredThemeAccent());
   const [idbModalOpen, setIdbModalOpen] = useState(false);
@@ -200,7 +205,7 @@ export default function ControlAreas() {
   const panelConstrain = isHalfScreen ? "max-w-2xl" : "w-full min-w-0";
 
   const [dataBusy, setDataBusy] = useState<"export" | "import" | "reset" | null>(null);
-  const [dataMessage, setDataMessage] = useState<string | null>(null);
+  const [dataNotice, setDataNotice] = useState<DataNotice | null>(null);
 
   const downloadBlob = (blob: Blob, name: string) => {
     const a = document.createElement("a");
@@ -211,15 +216,15 @@ export default function ControlAreas() {
   };
 
   const onExportBackup = async () => {
-    setDataMessage(null);
+    setDataNotice({ tone: "info", text: "Packing browser data into a .zip backup…" });
     setDataBusy("export");
     try {
       const blob = await buildConfigBackupZip();
       downloadBlob(blob, getEurobotBackupDownloadFilename());
-      setDataMessage("Downloaded .zip");
+      setDataNotice({ tone: "success", text: "Backup downloaded." });
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
-      setDataMessage("Backup failed: " + msg);
+      setDataNotice({ tone: "error", text: "Backup failed: " + msg });
     } finally {
       setDataBusy(null);
     }
@@ -230,17 +235,17 @@ export default function ControlAreas() {
     e.target.value = "";
     if (!file) return;
     if (!isAcceptedBackupFile(file)) {
-      setDataMessage("Please choose a valid .zip app backup (Eurobot web backup file).");
+      setDataNotice({ tone: "error", text: "Choose a valid Eurobot web backup .zip file." });
       return;
     }
     if (!window.confirm("Replace all local settings, playmat plans, and library (GLB + sponsor logos) with this backup?")) {
       return;
     }
-    setDataMessage(null);
+    setDataNotice({ tone: "info", text: "Checking backup contents before replacing browser data…" });
     setDataBusy("import");
     try {
       await importConfigBackupFromFile(file);
-      setDataMessage("Restored. Reloading…");
+      setDataNotice({ tone: "success", text: "Restore complete. Reloading…" });
       window.setTimeout(() => {
         try {
           location.reload();
@@ -250,7 +255,10 @@ export default function ControlAreas() {
       }, 200);
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
-      setDataMessage("Restore failed: " + msg);
+      setDataNotice({
+        tone: "error",
+        text: "Restore failed before replacing browser data: " + msg,
+      });
     } finally {
       setDataBusy(null);
     }
@@ -268,11 +276,11 @@ export default function ControlAreas() {
     if (!window.confirm("This is your last confirmation: erase everything?")) {
       return;
     }
-    setDataMessage(null);
+    setDataNotice({ tone: "info", text: "Deleting local browser data and applying factory defaults…" });
     setDataBusy("reset");
     try {
       await resetAllDataToFactoryDefaults();
-      setDataMessage("Reset complete. Reloading…");
+      setDataNotice({ tone: "success", text: "Factory reset complete. Reloading…" });
       void refreshLibrary();
       window.setTimeout(() => {
         try {
@@ -283,7 +291,7 @@ export default function ControlAreas() {
       }, 200);
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
-      setDataMessage("Reset failed: " + msg);
+      setDataNotice({ tone: "error", text: "Reset failed: " + msg });
     } finally {
       setDataBusy(null);
     }
@@ -292,9 +300,18 @@ export default function ControlAreas() {
   const dataPanel = (
     <StatusPanel title="Data">
       <form className={clsx("space-y-3", panelConstrain)} onSubmit={onFactoryReset}>
-        {dataMessage ? (
-          <p className="text-[0.9em] leading-relaxed text-[#b0b0b0]" role="status">
-            {dataMessage}
+        {dataNotice ? (
+          <p
+            className={clsx(
+              "rounded-md border px-3 py-2 text-[0.9em] font-semibold leading-relaxed",
+              dataNotice.tone === "success" && "border-emerald-400/20 bg-emerald-950/25 text-emerald-100",
+              dataNotice.tone === "error" && "border-rose-400/25 bg-rose-950/25 text-rose-100",
+              dataNotice.tone === "info" && "border-white/12 bg-white/[0.04] text-[#d0d0d0]"
+            )}
+            role="status"
+            aria-live="polite"
+          >
+            {dataNotice.text}
           </p>
         ) : null}
         <div className="grid w-full min-w-0 grid-cols-1 items-stretch gap-3 sm:grid-cols-3 sm:gap-2">
@@ -306,7 +323,8 @@ export default function ControlAreas() {
             className={clsx(
               MANUAL_CTRL_ACCENT,
               "flex h-full min-h-0 flex-col items-center justify-center gap-2 !py-4",
-              (dataBusy != null && dataBusy !== "export") && "pointer-events-none opacity-50"
+              dataBusy != null && dataBusy !== "export" && "pointer-events-none opacity-45",
+              dataBusy === "export" && "cursor-progress"
             )}
             style={{ backgroundColor: "var(--theme-accent)" }}
           >
@@ -330,7 +348,8 @@ export default function ControlAreas() {
               className={clsx(
                 MANUAL_CTRL_ACCENT,
                 "flex h-full min-h-0 w-full min-w-0 cursor-pointer flex-col items-center justify-center gap-2 !py-4",
-                (dataBusy != null && dataBusy !== "import") && "pointer-events-none opacity-50"
+                dataBusy != null && dataBusy !== "import" && "pointer-events-none opacity-45",
+                dataBusy === "import" && "cursor-progress"
               )}
               style={{ backgroundColor: "var(--theme-accent)" }}
             >
@@ -348,7 +367,8 @@ export default function ControlAreas() {
               MANUAL_CTRL_NEUTRAL,
               "border-amber-500/30 text-amber-100/95 hover:border-amber-500/50 hover:bg-amber-950/30",
               "flex h-full min-h-0 flex-col items-center justify-center gap-2 !py-4",
-              dataBusy != null && "pointer-events-none opacity-50"
+              dataBusy != null && dataBusy !== "reset" && "pointer-events-none opacity-45",
+              dataBusy === "reset" && "cursor-progress"
             )}
           >
             <HiArrowPath className="h-8 w-8 shrink-0 sm:h-9 sm:w-9" aria-hidden />
