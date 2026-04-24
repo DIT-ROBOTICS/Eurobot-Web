@@ -115,7 +115,7 @@ export function validateJsonMissionPlansJson(content: string): { ok: true; data:
   return { ok: true, data: parsed };
 }
 
-const DEFAULT_HEX = "#E64545";
+const DEFAULT_HEX = "#DE272C";
 
 /**
  * 6-char #RRGGBB for HTML color inputs (falls back to saved accent or default); hex digits are uppercase.

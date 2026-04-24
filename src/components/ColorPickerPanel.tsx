@@ -392,7 +392,7 @@ export function ColorPickerPanel({ value, onHexChange, onApply, fallbackHex }: P
             autoComplete="off"
             spellCheck={false}
             aria-label="Color value"
-            placeholder="#E64545"
+            placeholder="#DE272C"
           />
         </div>
         <div className="flex shrink-0">

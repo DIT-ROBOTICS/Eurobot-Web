@@ -1,7 +1,7 @@
 import { THEME_ACCENT_KEY } from './storageKeys';
 
 /** App brand accent (DIT red — matches long-standing control placeholder) */
-export const DEFAULT_THEME_ACCENT = "#E64545";
+export const DEFAULT_THEME_ACCENT = "#DE272C";
 
 const DEFAULT_ACCENT = DEFAULT_THEME_ACCENT;
 

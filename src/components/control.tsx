@@ -37,7 +37,7 @@ import {
 import { HiArrowDownTray, HiArrowPath, HiArrowUpTray } from "react-icons/hi2";
 
 const THEME_PRESET_HEX = [
-  "#E64545",
+  "#DE272C",
   "#FF4D4D",
   "#F97316",
   "#EAB308",

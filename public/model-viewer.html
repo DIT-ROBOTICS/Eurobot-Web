@@ -20,7 +20,7 @@
       height: 100%;
       background-color: #0e0e0e;
       --poster-color: #0e0e0e;
-      --progress-bar-color: var(--progress-accent, #e64545);
+      --progress-bar-color: var(--progress-accent, #de272c);
       --camera-orbit-sensitivity: 0.85;
       --interaction-prompt-threshold: 0;
       --interaction-prompt: none;
@@ -71,7 +71,7 @@
     .loading-spinner {
       width: 40px; height: 40px;
       border: 4px solid rgba(255, 77, 77, 0.3);
-      border-top: 4px solid var(--progress-accent, #e64545);
+      border-top: 4px solid var(--progress-accent, #de272c);
       border-radius: 50%; animation: spin 1s linear infinite;
     }
     @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
@@ -109,7 +109,7 @@
   <script>
     document.addEventListener("DOMContentLoaded", function () {
       var theme = (function () {
-        try { return localStorage.getItem("eurobot-theme-accent") || "#e64545"; } catch (e) { return "#e64545"; }
+        try { return localStorage.getItem("eurobot-theme-accent") || "#de272c"; } catch (e) { return "#de272c"; }
       })();
       document.documentElement.style.setProperty("--progress-accent", theme);
       var modelViewer = document.getElementById("robot-model");
