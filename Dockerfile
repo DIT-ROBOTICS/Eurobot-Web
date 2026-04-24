@@ -51,7 +51,6 @@ RUN apt-get update && apt-get install -y \
 
 # Copy build artifacts and source code
 COPY --from=bun-build /app/dist /usr/share/nginx/html
-COPY --from=bun-build /app/public/assets /usr/share/nginx/html/assets
 COPY --from=bun-build /app/node_modules /app/node_modules
 COPY --from=bun-build /app/src /app/src
 COPY --from=bun-build /app/package.json /app/

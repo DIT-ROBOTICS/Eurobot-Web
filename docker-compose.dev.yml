@@ -3,7 +3,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.dev
-    image: seanchangx/eurobot-2026-web:dev
+    image: seanchangx/eurobot-web:dev
     # ports:
     #   - "3000:3000"   # React app
     #   - "3001:3001"   # API server

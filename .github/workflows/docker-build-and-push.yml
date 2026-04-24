@@ -1,0 +1,81 @@
+name: Build and push Docker image to GHCR
+
+on:
+  push:
+    branches:
+      - "eurobot-20[0-9][0-9]"
+      - "Eurobot-20[0-9][0-9]"
+  workflow_dispatch:
+    inputs:
+      year:
+        description: "Image tag (4-digit year), e.g. 2026. On push this is taken from the branch name instead."
+        required: false
+        type: string
+
+concurrency:
+  group: docker-build-and-push-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  REGISTRY: ghcr.io
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Derive image tag (year from branch or manual input)
+        id: year
+        run: |
+          manual="${{ github.event.inputs.year }}"
+          if [ -n "$manual" ]; then
+            if [[ "$manual" =~ ^[0-9]{4}$ ]]; then
+              echo "tag=$manual" >> "$GITHUB_OUTPUT"
+            else
+              echo "::error::workflow_dispatch input year must be exactly 4 digits (got: $manual)"
+              exit 1
+            fi
+            exit 0
+          fi
+          ref="${GITHUB_REF_NAME}"
+          if [[ "$ref" =~ ^[Ee]urobot-([0-9]{4})$ ]]; then
+            echo "tag=${BASH_REMATCH[1]}" >> "$GITHUB_OUTPUT"
+          else
+            echo "::error::Branch must be eurobot-YYYY or Eurobot-YYYY (got: $ref), or run workflow_dispatch with input year"
+            exit 1
+          fi
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v4
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Docker metadata
+        id: meta
+        uses: docker/metadata-action@v6
+        with:
+          images: ${{ env.REGISTRY }}/${{ github.repository }}
+          tags: |
+            type=raw,value=${{ steps.year.outputs.tag }}
+
+      - name: Build and push
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

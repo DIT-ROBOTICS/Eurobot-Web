@@ -1,9 +1,11 @@
+# GHCR tag is the competition year (branch eurobot-YYYY → image :YYYY). Override with env EUROBOT_IMAGE_TAG.
 services:
   eurobot-2026-web:
+    image: ghcr.io/dit-robotics/eurobot-web:${EUROBOT_IMAGE_TAG:-2026}
     build:
       context: .
       dockerfile: Dockerfile
-    image: seanchangx/eurobot-2026-web:latest
+    pull_policy: if_not_present
     container_name: eurobot-2026-web
     # ports:
     #   - "3000:3000"
