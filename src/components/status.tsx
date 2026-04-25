@@ -929,7 +929,7 @@ export default function RobotDashboard() {
   }, [rosConnected, lastGroupsStateUpdateTime]); // Removed systemGroupStatus from deps
 
   const callGameReady = useCallback(() => {
-    // Four StartUpSrv calls (group 1–4, state=1) — same contract as Eurobot-2026-Main mock; does not change System Status locally.
+    // Four StartUpSrv calls (group 1–4, state=1); does not change System Status locally.
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const R = (window as any).ROSLIB;
     if (!R) return;
@@ -946,7 +946,10 @@ export default function RobotDashboard() {
       const req = new R.ServiceRequest({ group: gid, state: 1 });
       srv.callService(
         req,
-        (res: { success?: boolean }) => {
+        (res: { group?: number; success?: boolean }) => {
+          if (typeof res?.group === "number" && res.group !== gid) {
+            console.warn("ready_signal: requested group", gid, "but response group was", res.group);
+          }
           if (!res?.success) {
             console.warn("ready_signal: group", gid, "returned success=false");
           }

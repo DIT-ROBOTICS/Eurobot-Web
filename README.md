@@ -124,7 +124,7 @@ Replace `/<sima_name>/status` with the exact SIMA names configured in Control Pa
 
 | Service | Type | Called by | Request / response handling |
 |---------|------|-----------|-----------------------------|
-| `/robot/startup/ready_signal` | `btcpp_ros2_interfaces/srv/StartUpSrv` | Robot Status | Called four times for groups `1` to `4` with `{ group: gid, state: 1 }`. The UI logs a warning if any response has `success=false`, then continues to the next group. |
+| `/robot/startup/ready_signal` | `btcpp_ros2_interfaces/srv/StartUpSrv` | Robot Status | Called four times for groups `1` to `4` with `{ group: gid, state: 1 }`. Response is expected to include `{ group, success }`; the UI logs a warning if the response group differs or `success=false`, then continues to the next group. |
 
 ### Service Servers Advertised By The Web UI
 
