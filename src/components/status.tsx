@@ -193,7 +193,7 @@ export default function RobotDashboard() {
     }
     const p = createPublisher("/robot/startup/plug", "std_msgs/msg/Bool");
     plugPubRef.current = p;
-    const t = createPublisher("/robot/on_take", "std_msgs/msg/Int16");
+    const t = createPublisher("/robot/on_take", "std_msgs/msg/Int32MultiArray");
     onTakePubRef.current = t;
     return () => {
       if (p)
@@ -977,8 +977,18 @@ export default function RobotDashboard() {
     const R = (window as any).ROSLIB;
     if (!t || !R) return;
     const M = R.Message;
+    const layout = { dim: [] as { label: string; size: number; stride: number }[], data_offset: 0 };
     [0, 1, 2, 3].forEach((n, i) => {
-      setTimeout(() => t.publish(new M({ data: n })), i * 400);
+      setTimeout(
+        () =>
+          t.publish(
+            new M({
+              layout,
+              data: [1, 1, 1, 1, n],
+            })
+          ),
+        i * 400
+      );
     });
   }, []);
 
