@@ -438,7 +438,7 @@ export default function RobotDashboard() {
 
   useEffect(() => {
     if (!isVoltageAvailable || !hasReceivedBatteryRef.current) return;
-    const alpha = 0.42;
+    const alpha = 0.85;
     setDisplayVoltage((prev) => parseFloat((prev * (1 - alpha) + batteryVoltage * alpha).toFixed(2)));
   }, [batteryVoltage, isVoltageAvailable]);
 
