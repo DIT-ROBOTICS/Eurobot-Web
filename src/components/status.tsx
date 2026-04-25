@@ -193,7 +193,7 @@ export default function RobotDashboard() {
     }
     const p = createPublisher("/robot/startup/plug", "std_msgs/msg/Bool");
     plugPubRef.current = p;
-    const t = createPublisher("/robot/on_take", "std_msgs/msg/Int32MultiArray");
+    const t = createPublisher("/robot/on_take", "std_msgs/msg/Int16MultiArray");
     onTakePubRef.current = t;
     return () => {
       if (p)
