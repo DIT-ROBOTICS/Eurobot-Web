@@ -16,7 +16,10 @@ services:
       - API_SERVER_PORT=3001
     volumes:
       - ./:/app
-      - /app/node_modules
+      - node_modules_cache:/app/node_modules
       # - /home/share/data:/home/share/data
     command: sh -c "bun install && node src/server.js & bun run dev -- --host 0.0.0.0"
     network_mode: "host"
+
+volumes:
+  node_modules_cache:

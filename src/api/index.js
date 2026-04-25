@@ -810,6 +810,12 @@ const ROBOT_CONFIG_PARAM_KEYS = [
   'cursor_tolerance',
 ];
 
+/** js-yaml prints integer 0,2 as 0,2; ROS param files use x.0. Match indented lines, all supported keys. */
+const ROBOT_CONFIG_INT_TO_FLOAT_RE = new RegExp(
+  `^(\\s*)(${ROBOT_CONFIG_PARAM_KEYS.join('|')}): (\\d+)$`,
+  'gm',
+);
+
 function getDefaultRobotConfigDoc() {
   return {
     '/**': {
@@ -883,10 +889,7 @@ router.post('/robot-config', (req, res) => {
     }
     delete doc[k].ros__parameters.robot_name;
     let out = yaml.dump(doc, yamlOptions);
-    out = out.replace(
-      /(pantry_rival_distance_threshold|collection_rival_distance_threshold|flip_distance_threshold|cursor_tolerance|pantry_rival_sigma|collection_rival_sigma|pantry_sensitivity|collection_sensitivity): (\d+)$/gm,
-      '$1: $2.0'
-    );
+    out = out.replace(ROBOT_CONFIG_INT_TO_FLOAT_RE, '$1$2: $3.0');
     const dir = path.dirname(robotConfigPath);
     if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
     fs.writeFileSync(robotConfigPath, out);
@@ -1001,10 +1004,7 @@ router.post('/reset-to-defaults', (req, res) => {
     // 4. Reset robot_config.yaml
     const defaultRobotDoc = getDefaultRobotConfigDoc();
     let outRobot = yaml.dump(defaultRobotDoc, yamlOptions);
-    outRobot = outRobot.replace(
-      /(pantry_rival_distance_threshold|collection_rival_distance_threshold|flip_distance_threshold|cursor_tolerance|pantry_rival_sigma|collection_rival_sigma|pantry_sensitivity|collection_sensitivity): (\d+)$/gm,
-      '$1: $2.0',
-    );
+    outRobot = outRobot.replace(ROBOT_CONFIG_INT_TO_FLOAT_RE, '$1$2: $3.0');
     const rcDir = path.dirname(robotConfigPath);
     if (!fs.existsSync(rcDir)) {
       fs.mkdirSync(rcDir, { recursive: true });

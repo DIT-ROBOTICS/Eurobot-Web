@@ -661,6 +661,30 @@ input[type="range"] {
   overflow: hidden;
 }
 
+/* One circular ring of theme-tinted glow (orbit band), centered with sponsor scene. */
+.sponsor-ov-orbit-ring {
+  z-index: 4;
+  mix-blend-mode: screen;
+  animation: sponsor-ov-orbit-ring-pulse 18s ease-in-out infinite alternate;
+}
+
+.sponsor-ov-orbit-ring__disc {
+  width: min(105vmin, 1520px);
+  max-width: 99.5vw;
+  aspect-ratio: 1;
+}
+
+@keyframes sponsor-ov-orbit-ring-pulse {
+  from {
+    opacity: 0.42;
+    filter: brightness(0.75) saturate(0.9);
+  }
+  to {
+    opacity: 0.64;
+    filter: brightness(0.92) saturate(0.98);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .sponsor-card-slide,
   .sponsor-ov-surface,
@@ -674,6 +698,11 @@ input[type="range"] {
   .sponsor-ov-vig {
     animation: none;
     opacity: 1;
+  }
+  .sponsor-ov-orbit-ring {
+    animation: none;
+    opacity: 0.6;
+    filter: none;
   }
   .sponsor-ov-asset__img,
   .sponsor-ov-asset__img--decode {

@@ -84,15 +84,131 @@ const FIXED_CENTER_LOGO_PX = 500;
 
 function nodeDiameters(sponsorCount: number): { center: number; sat: number } {
   const n = Math.max(0, sponsorCount);
-  const t = n <= 0 ? 0.12 : n / 48;
-  const inv = 1 - Math.min(0.9, t ** 0.55);
-  /** 贊助圖：人數多時略縮小，人數少時可到大約 140px。 */
-  const sat = Math.max(34, Math.min(140, Math.floor(48 + 86 * inv)));
+  /** Softer “many sponsors” taper so dense lists stay readable. Center size unchanged. */
+  const t = n <= 0 ? 0.08 : n / 80;
+  const inv = 1 - Math.min(0.58, t ** 0.42);
+  const sat = Math.max(80, Math.min(280, Math.floor(96 + 168 * inv)));
   return { center: FIXED_CENTER_LOGO_PX, sat };
 }
 
+/**
+ * Match visual weight across aspect ratios: area ≈ sat² (same as a square of side sat).
+ * A plain maxW=maxH=sat + contain makes wide logos tiny; this uses w/h = natW/natH and w×h ≈ sat².
+ * Long side is capped so very wide SVGs do not explode past the orbit layout.
+ */
+const SAT_LOGO_LONG_SIDE_CAP = 1.48;
+
+function sponsorBoxPx(sat: number, naturalW: number, naturalH: number): { w: number; h: number } {
+  if (!Number.isFinite(naturalW) || !Number.isFinite(naturalH) || naturalW <= 0 || naturalH <= 0) {
+    return { w: sat, h: sat };
+  }
+  const aspect = naturalW / naturalH;
+  let w = sat * Math.sqrt(aspect);
+  let h = sat / Math.sqrt(aspect);
+  const cap = sat * SAT_LOGO_LONG_SIDE_CAP;
+  const m = Math.max(w, h);
+  if (m > cap) {
+    const s = cap / m;
+    w *= s;
+    h *= s;
+  }
+  return { w: Math.max(1, w), h: Math.max(1, h) };
+}
+
+/** Inner..outer orbit radii (fraction of base ring). Wider spread = fewer cross-orbit collisions. */
+const NUM_ORBIT_TIERS = 3;
+const TIER_R_MUL: readonly number[] = [0.5, 0.68, 0.88];
+/** Min center–center distance vs box size: logos can fill the square, so this must exceed 1. */
+const ORBIT_MIN_GAP_MUL = 1.32;
+
+function projectToRing(x: number, y: number, rTarget: number): { x: number; y: number } {
+  const len = Math.hypot(x, y) || 1e-7;
+  const s = rTarget / len;
+  return { x: x * s, y: y * s };
+}
+
+/**
+ * Pushes apart overlapping logos while projecting each back onto its tier circle (multi-orbit, no 3D).
+ */
+function relaxSponsorOrbits(
+  n: number,
+  ringRBase: number,
+  sat: number,
+  tierMul: readonly number[]
+): { r: number[]; a: number[] } {
+  if (n === 0) return { r: [], a: [] };
+  /** Slightly looser than plain `sat`: wide equal-area boxes grow along the long side (capped). */
+  const dMin = sat * ORBIT_MIN_GAP_MUL * 1.08;
+  const r0: number[] = new Array(n);
+  const a: number[] = new Array(n);
+  const nT = NUM_ORBIT_TIERS;
+  for (let i = 0; i < n; i++) {
+    const tier = i % nT;
+    r0[i] = ringRBase * (tierMul[Math.min(tier, tierMul.length - 1)] ?? 0.7);
+  }
+  for (let i = 0; i < n; i++) {
+    const tier = i % nT;
+    const nOn = countOnTier(n, tier);
+    const indexIn = Math.floor(i / nT);
+    const base = nOn > 0 ? (2 * Math.PI * indexIn) / nOn - Math.PI / 2 : -Math.PI / 2;
+    a[i] = base + (tier * (2 * Math.PI)) / (2 * n + 0.01);
+  }
+  const r: number[] = r0.map((v) => v);
+  const toXY = (i: number) => {
+    const an = a[i]!;
+    const ri = r[i]!;
+    return { x: ri * Math.cos(an), y: -ri * Math.sin(an) };
+  };
+  const hasOverlap = () => {
+    for (let i = 0; i < n; i++) {
+      for (let j = i + 1; j < n; j++) {
+        const p = toXY(i);
+        const q = toXY(j);
+        if (Math.hypot(q.x - p.x, q.y - p.y) < dMin) return true;
+      }
+    }
+    return false;
+  };
+  const ITER = 100;
+  const step = 0.42;
+  let scale = 1;
+  for (let pass = 0; pass < 5; pass++) {
+    for (let k = 0; k < n; k++) {
+      r[k] = r0[k]! * scale;
+    }
+    for (let it = 0; it < ITER; it++) {
+      for (let i = 0; i < n; i++) {
+        for (let j = i + 1; j < n; j++) {
+          const p = toXY(i);
+          const q = toXY(j);
+          const dx = q.x - p.x;
+          const dy = q.y - p.y;
+          const dist = Math.hypot(dx, dy) || 1e-4;
+          if (dist >= dMin) continue;
+          const ux = dx / dist;
+          const uy = dy / dist;
+          const push = step * (dMin - dist);
+          const pSep = { x: p.x - ux * (push * 0.5), y: p.y - uy * (push * 0.5) };
+          const qSep = { x: q.x + ux * (push * 0.5), y: q.y + uy * (push * 0.5) };
+          const pOn = projectToRing(pSep.x, pSep.y, r[i]!);
+          const qOn = projectToRing(qSep.x, qSep.y, r[j]!);
+          a[i] = Math.atan2(-pOn.y, pOn.x);
+          a[j] = Math.atan2(-qOn.y, qOn.x);
+        }
+      }
+    }
+    if (!hasOverlap()) break;
+    scale *= 1.08;
+  }
+  return { r, a };
+}
+
 type SatWobble = {
-  /** Radial: frequency & phase (near/far). */
+  /** Orbit tier 0 = inner, 2 = outer. */
+  tier: number;
+  /** Slight per-satellite angular rate (parallax). */
+  speedMul: number;
+  /** Radial: frequency & phase. */
   rW1: number;
   rW2: number;
   pR1: number;
@@ -104,21 +220,57 @@ type SatWobble = {
   pS1: number;
   pS2: number;
   sAmp: number;
+  /** Pseudo-depth: near/far like inclined orbit (angle + slow drift). */
+  dW1: number;
+  dW2: number;
+  pDepth: number;
+  pD1: number;
+  pD2: number;
+  pD3: number;
+  /** Independent “breathing” scale: slow/mid wander (each logo out of phase). */
+  bW1: number;
+  bW2: number;
+  bW3: number;
+  bPh1: number;
+  bPh2: number;
+  bPh3: number;
+  bAmp: number;
 };
 
 function makeWobbles(n: number): SatWobble[] {
-  return Array.from({ length: n }, () => ({
+  return Array.from({ length: n }, (_, i) => ({
+    tier: i % NUM_ORBIT_TIERS,
+    speedMul: 1,
     rW1: 0.35 + Math.random() * 0.5,
     rW2: 0.6 + Math.random() * 0.85,
     pR1: Math.random() * Math.PI * 2,
     pR2: Math.random() * Math.PI * 2,
-    rAmp: 0.1 + Math.random() * 0.14,
+    rAmp: 0.04 + Math.random() * 0.05,
     sW1: 0.45 + Math.random() * 0.6,
     sW2: 0.7 + Math.random() * 0.55,
     pS1: Math.random() * Math.PI * 2,
     pS2: Math.random() * Math.PI * 2,
     sAmp: 0.05 + Math.random() * 0.12,
+    dW1: 0.22 + Math.random() * 0.45,
+    dW2: 0.5 + Math.random() * 0.55,
+    pDepth: Math.random() * Math.PI * 2,
+    pD1: Math.random() * Math.PI * 2,
+    pD2: Math.random() * Math.PI * 2,
+    pD3: Math.random() * Math.PI * 2,
+    bW1: 0.12 + Math.random() * 0.35,
+    bW2: 0.28 + Math.random() * 0.45,
+    bW3: 0.5 + Math.random() * 0.55,
+    bPh1: Math.random() * Math.PI * 2,
+    bPh2: Math.random() * Math.PI * 2,
+    bPh3: Math.random() * Math.PI * 2,
+    bAmp: 0.09 + Math.random() * 0.14,
   }));
+}
+
+/** Count of satellites on the same ring tier. */
+function countOnTier(n: number, tier: number): number {
+  if (n <= 0) return 0;
+  return Math.floor((n - 1 - tier) / NUM_ORBIT_TIERS) + 1;
 }
 
 /** Ring angular velocity (rad/s). Full turn ~57s at 0.11. */
@@ -126,8 +278,36 @@ const ORBIT_RAD_S = 0.11;
 
 function ringRadiusPx(nSponsors: number): number {
   const n = Math.max(0, nSponsors);
-  /** Orbit radius in fixed px (viewport-independent), scaled with center logo. */
-  return 450 + Math.min(24, n) * 9.4;
+  /** Base outer radius; relaxSponsorOrbits may grow per-tier r when dense. */
+  return 550 + Math.min(40, n) * 10.5;
+}
+
+/** How long (s) one sponsor is the big “spotlight” before a new random index is chosen. */
+const SPOTLIGHT_PERIOD_S = 3.1;
+/** Extra scale on top of normal (at full envelope = 1.45x total on spotlight). */
+const SPOTLIGHT_EXTRA = 0.75;
+/** Slight de-emphasis on others when spotlight is at full (max ~4% down). */
+const SPOTLIGHT_OTHERS_DIP = 0.07;
+
+function hashString32(key: string): number {
+  let h = 9;
+  for (let k = 0; k < key.length; k++) h = (Math.imul(h, 0x1f3b2a37) + key.charCodeAt(k)) | 0;
+  return h >>> 0;
+}
+
+function spotlightIndex(n: number, tSec: number, key: string): number {
+  if (n <= 0) return 0;
+  const slot = Math.floor(tSec / SPOTLIGHT_PERIOD_S);
+  const m = 0x9e3779b9 + hashString32(key);
+  return ((m ^ (slot * 0x85ebca6b)) >>> 0) % n;
+}
+
+function spotlightEnvelope(tSec: number): number {
+  const p = SPOTLIGHT_PERIOD_S;
+  const f = tSec / p - Math.floor(tSec / p);
+  if (f < 0.09) return f / 0.09;
+  if (f > 0.91) return (1 - f) / 0.09;
+  return 1;
 }
 
 type Props = {
@@ -145,7 +325,8 @@ function getReducedMotion(): boolean {
 }
 
 /**
- * Center = dit (max visual weight). Ring from viewport. Per-logo radial + scale wobble. Orbit as base angle.
+ * Center = dit. Sponsors on multiple concentric orbits; pseudo-depth uses scale + z-order only (full white),
+ * Per-logo breathing; periodic “spotlight” makes one random sponsor much larger, others slightly smaller.
  */
 export function SponsorFullscreenOverlay({ records, onClose, openOrigin, closeExit }: Props) {
   const [reduced, setReduced] = useState(getReducedMotion);
@@ -180,12 +361,19 @@ export function SponsorFullscreenOverlay({ records, onClose, openOrigin, closeEx
     };
   }, [satObjectUrls]);
 
+  const orbitLayout = useMemo(() => {
+    const n = records.length;
+    if (n === 0) return { r: [] as number[], a: [] as number[] };
+    return relaxSponsorOrbits(n, ringRadiusPx(n), nodeDiameters(n).sat, TIER_R_MUL);
+  }, [idKey, records.length]);
+
   const applyOrbit = useCallback(
     (sweep: number, tSec: number) => {
       const n = records.length;
       if (n === 0) return;
+      const { r: rLay, a: aLay } = orbitLayout;
+      if (aLay.length < n) return;
       const { center, sat: satSize } = nodeDiameters(n);
-      const ringR = ringRadiusPx(n);
       if (centerRef.current) {
         centerRef.current.style.transform = "translate3d(calc(-50% + 0px), calc(-50% + 0px), 0)";
         centerRef.current.style.maxWidth = `${center}px`;
@@ -196,27 +384,72 @@ export function SponsorFullscreenOverlay({ records, onClose, openOrigin, closeEx
         const img = satRefs.current[i];
         if (!img) continue;
         const w = wobs[i];
-        const base = n > 0 ? (2 * Math.PI * i) / n - Math.PI / 2 : 0;
-        const ang = base + sweep;
-        let rR = ringR;
+        const rBase = rLay[i] ?? 0;
+        const ang = (aLay[i] ?? 0) + sweep;
+        let rR = rBase;
         let sc = 1;
-        if (w && !reduced && !denseSponsors) {
-          const wobR =
-            0.5 * Math.sin(tSec * w.rW1 + w.pR1) + 0.32 * Math.sin(tSec * w.rW2 * 0.85 + w.pR2) + 0.2 * Math.sin(tSec * w.rW1 * 1.9 + w.pR1);
-          const rMul = 1 + w.rAmp * wobR;
-          rR = ringR * Math.max(0.7, Math.min(1.18, rMul));
-          const sPulse =
-            w.sAmp * Math.sin(tSec * w.sW1 + w.pS1) + w.sAmp * 0.55 * Math.sin(tSec * w.sW2 * 1.2 + w.pS2) + 0.045 * Math.sin(tSec * 0.15 + w.pS1);
-          sc = Math.max(0.8, Math.min(1.22, 1 + sPulse));
+        let z01 = 0.55;
+        if (w && !reduced) {
+          const wobA = 0.48 * Math.sin(ang * 1.12 + w.pDepth) + 0.32 * Math.sin(ang * 2.1 + w.pD3) * Math.sin(tSec * 0.15 + w.pD2);
+          const wobT =
+            0.5 * Math.sin(tSec * w.dW1 + w.pD1) + 0.45 * Math.sin(tSec * w.dW2 * 0.68 + w.pD2) * (0.55 + 0.45 * Math.sin(ang * 0.9 + w.pDepth));
+          z01 = 0.5 + 0.5 * Math.max(-1, Math.min(1, 0.55 * wobA + 0.5 * wobT));
+          if (denseSponsors) {
+            const a =
+              0.52 * Math.sin(ang * 0.9 + w.pDepth) * Math.sin(tSec * 0.35 + w.pD1) +
+              0.35 * Math.sin(ang * 0.45 + w.pD3) +
+              0.28 * Math.sin(tSec * w.dW2 * 0.38 + w.pD2);
+            z01 = Math.max(0.1, Math.min(0.94, 0.5 + 0.48 * a));
+          }
+          if (!denseSponsors) {
+            const wobR =
+              0.5 * Math.sin(tSec * w.rW1 + w.pR1) + 0.32 * Math.sin(tSec * w.rW2 * 0.85 + w.pR2) + 0.2 * Math.sin(tSec * w.rW1 * 1.9 + w.pR1);
+            const rMul = 1 + w.rAmp * wobR;
+            rR *= Math.max(0.97, Math.min(1.03, rMul));
+            const sPulse =
+              w.sAmp * Math.sin(tSec * w.sW1 + w.pS1) + w.sAmp * 0.55 * Math.sin(tSec * w.sW2 * 1.2 + w.pS2) + 0.045 * Math.sin(tSec * 0.15 + w.pS1);
+            sc = Math.max(0.9, Math.min(1.1, 1 + sPulse));
+          }
+          const breathW =
+            0.4 * Math.sin(tSec * w.bW1 + w.bPh1) +
+            0.32 * Math.sin(tSec * w.bW2 * 0.88 + w.bPh2) +
+            0.2 * Math.sin(tSec * w.bW3 * 0.42 + w.bPh3) +
+            0.08 * Math.sin(ang * 0.25 + tSec * 0.11 + w.bPh1);
+          sc *= 1 + w.bAmp * Math.max(-1, Math.min(1, breathW));
+          sc = Math.max(0.86, Math.min(1.16, sc));
+        }
+        const depthSc = 0.94 + 0.08 * z01;
+        sc *= depthSc;
+        const spotI = reduced || n < 1 ? -1 : spotlightIndex(n, tSec, idKey);
+        const env = spotI < 0 ? 0 : spotlightEnvelope(tSec);
+        if (spotI >= 0 && env > 0) {
+          if (i === spotI) {
+            sc *= 1 + env * SPOTLIGHT_EXTRA;
+          } else {
+            sc *= 1 - env * SPOTLIGHT_OTHERS_DIP;
+          }
         }
         const x = rR * Math.cos(ang);
         const y = -rR * Math.sin(ang);
+        const wrap = img.parentElement;
+        if (wrap) {
+          if (spotI >= 0 && i === spotI) {
+            wrap.style.zIndex = "18";
+          } else {
+            // Below center (20) and below spotlight
+            wrap.style.zIndex = String(4 + Math.round(9 * z01));
+          }
+        }
+        if (reduced) {
+          img.style.removeProperty("opacity");
+        }
         img.style.transform = `translate3d(calc(-50% + ${x}px), calc(-50% + ${y}px), 0) scale(${sc})`;
-        img.style.maxWidth = `${satSize}px`;
-        img.style.maxHeight = `${satSize}px`;
+        const box = sponsorBoxPx(satSize, img.naturalWidth, img.naturalHeight);
+        img.style.maxWidth = `${box.w}px`;
+        img.style.maxHeight = `${box.h}px`;
       }
     },
-    [records.length, reduced, denseSponsors]
+    [idKey, records.length, reduced, denseSponsors, orbitLayout]
   );
 
   useEffect(() => {
@@ -383,6 +616,20 @@ export function SponsorFullscreenOverlay({ records, onClose, openOrigin, closeEx
           aria-hidden
         >
           <canvas ref={starCanvasRef} className="block h-full min-h-0 w-full min-w-0" />
+        </div>
+        <div
+          className="sponsor-ov-orbit-ring pointer-events-none absolute inset-0 flex items-center justify-center"
+          aria-hidden
+        >
+          <div
+            className="sponsor-ov-orbit-ring__disc shrink-0"
+            style={{
+              background: [
+                "radial-gradient(circle at 50% 50%, transparent 0% 11%, color-mix(in srgb, var(--theme-accent) 0.9%, transparent) 15%, color-mix(in srgb, var(--theme-accent) 2.4%, rgba(5,1,12,0.22)) 22%, color-mix(in srgb, var(--theme-accent) 5.5%, rgba(8,2,16,0.28)) 30%, color-mix(in srgb, var(--theme-accent) 11%, rgba(10,2,20,0.32)) 38%, color-mix(in srgb, var(--theme-accent) 17%, rgba(12,3,24,0.34)) 46%, color-mix(in srgb, var(--theme-accent) 20%, rgba(12,3,24,0.3)) 52%, color-mix(in srgb, var(--theme-accent) 16%, rgba(9,2,18,0.27)) 58%, color-mix(in srgb, var(--theme-accent) 10%, rgba(6,1,12,0.2)) 65%, color-mix(in srgb, var(--theme-accent) 5%, rgba(3,0,8,0.12)) 72%, color-mix(in srgb, var(--theme-accent) 2%, transparent) 77%, color-mix(in srgb, var(--theme-accent) 0.8%, transparent) 81%, transparent 85% 100%)",
+                "radial-gradient(circle at 50% 50%, transparent 0% 18%, color-mix(in srgb, var(--theme-accent) 1.2%, transparent) 26%, color-mix(in srgb, var(--theme-accent) 3.2%, rgba(6,0,12,0.09)) 40%, color-mix(in srgb, var(--theme-accent) 1.8%, transparent) 56%, color-mix(in srgb, var(--theme-accent) 0.5%, transparent) 70%, transparent 78% 100%)",
+              ].join(","),
+            }}
+          />
         </div>
         <div
           className="sponsor-ov-vig pointer-events-none absolute inset-0"
