@@ -40,12 +40,14 @@ const STARTUP_SRV_TYPE = "btcpp_ros2_interfaces/srv/StartUpSrv";
 
 const SIMA_STALE_MS = 1300;
 const BATTERY_STALE_MS = 8000;
+const BATTERY_UNAVAILABLE_VOLTAGE = 1.0;
 
 export default function RobotDashboard() {
   const [batteryVoltage, setBatteryVoltage] = useState(20.25);
   const [displayVoltage, setDisplayVoltage] = useState(20.25);
   const lastBatteryMsgAtRef = useRef(0);
   const hasReceivedBatteryRef = useRef(false);
+  const isVoltageAvailableRef = useRef(true);
   const [plugConnected, setPlugConnected] = useState(false); // Ready signal over plug interface
   const [lastPlugTrueTime, setLastPlugTrueTime] = useState(0); // Time when the last true plug signal was received
   const [simaNames, setSimaNames] = useState<string[]>(() => parseSimaNamesFromStorage());
@@ -247,7 +249,21 @@ export default function RobotDashboard() {
         if (isNaN(voltage)) return;
         lastBatteryMsgAtRef.current = Date.now();
         hasReceivedBatteryRef.current = true;
-        setBatteryVoltage(parseFloat(voltage.toFixed(1)));
+
+        if (voltage <= BATTERY_UNAVAILABLE_VOLTAGE) {
+          isVoltageAvailableRef.current = false;
+          setIsVoltageAvailable(false);
+          setBatteryVoltage(0);
+          setDisplayVoltage(0);
+          return;
+        }
+
+        const wasVoltageAvailable = isVoltageAvailableRef.current;
+        isVoltageAvailableRef.current = true;
+        setBatteryVoltage(voltage);
+        if (!wasVoltageAvailable) {
+          setDisplayVoltage(voltage);
+        }
         setIsVoltageAvailable(true);
       });
     }
@@ -431,6 +447,7 @@ export default function RobotDashboard() {
       return;
     }
     setIsVoltageAvailable(false);
+    isVoltageAvailableRef.current = false;
     hasReceivedBatteryRef.current = false;
     setBatteryVoltage(0);
     setDisplayVoltage(0);
@@ -447,6 +464,7 @@ export default function RobotDashboard() {
     const id = setInterval(() => {
       if (!hasReceivedBatteryRef.current) return;
       if (Date.now() - lastBatteryMsgAtRef.current > BATTERY_STALE_MS) {
+        isVoltageAvailableRef.current = false;
         setIsVoltageAvailable(false);
       }
     }, 2000);
