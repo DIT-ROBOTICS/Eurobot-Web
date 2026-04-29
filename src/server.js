@@ -14,9 +14,9 @@ const API_SERVER_PORT = process.env.API_SERVER_PORT || 3001;
 // Data directory
 const dataDir = '/home/share/data';
 
-// Match robot_config.yaml param lines: js-yaml may emit 0,2; normalize to 0.0,2.0 (see api/index.js)
+// Match robot_config.yaml param lines: js-yaml may emit 0,2,-1; normalize to 0.0,2.0,-1.0 (see api/index.js)
 const ROBOT_CONFIG_INT_TO_FLOAT_RE = new RegExp(
-  '^(\\s*)(pantry_aggressiveness|pantry_sensitivity|pantry_rival_sigma|pantry_rival_distance_threshold|collection_aggressiveness|collection_sensitivity|collection_rival_sigma|collection_rival_distance_threshold|flip_distance_threshold|cursor_tolerance): (\\d+)$',
+  '^(\\s*)(pantry_aggressiveness|pantry_sensitivity|pantry_rival_sigma|pantry_rival_distance_threshold|collection_aggressiveness|collection_sensitivity|collection_rival_sigma|collection_rival_distance_threshold|flip_distance_threshold|cursor_tolerance): (-?\\d+)$',
   'gm',
 );
 

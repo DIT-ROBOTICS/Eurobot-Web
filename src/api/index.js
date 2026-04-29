@@ -424,7 +424,9 @@ router.get('/nav-params', (req, res) => {
         fs.mkdirSync(dir, { recursive: true });
       }
       
-      fs.writeFileSync(profilePath, yaml.dump(defaultData));
+      let defaultYaml = yaml.dump(defaultData, yamlOptions);
+      defaultYaml = defaultYaml.replace(/(max_linear_velocity|max_angular_velocity): (-?\d+)$/gm, '$1: $2.0');
+      fs.writeFileSync(profilePath, defaultYaml);
       console.log(`Created default ${profile} profile with linear=${defaultLinear}, angular=${defaultAngular}`);
       
       return res.json({ 
@@ -810,9 +812,9 @@ const ROBOT_CONFIG_PARAM_KEYS = [
   'cursor_tolerance',
 ];
 
-/** js-yaml prints integer 0,2 as 0,2; ROS param files use x.0. Match indented lines, all supported keys. */
+/** js-yaml prints integer 0,2,-1 as 0,2,-1; ROS param files use x.0. Match indented lines, all supported keys, including negative values. */
 const ROBOT_CONFIG_INT_TO_FLOAT_RE = new RegExp(
-  `^(\\s*)(${ROBOT_CONFIG_PARAM_KEYS.join('|')}): (\\d+)$`,
+  `^(\\s*)(${ROBOT_CONFIG_PARAM_KEYS.join('|')}): (-?\\d+)$`,
   'gm',
 );
 
