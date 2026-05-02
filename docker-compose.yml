@@ -5,7 +5,6 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    pull_policy: if_not_present
     container_name: eurobot-2026-web
     # ports:
     #   - "3000:3000"
