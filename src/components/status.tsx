@@ -1122,13 +1122,14 @@ export default function RobotDashboard() {
         <div className="w-full max-w-2xl sm:max-w-none">
           <button
             type="button"
-            className="relative mt-8 block w-full overflow-hidden rounded-md px-5 py-4 text-center text-xl font-bold uppercase tracking-wider text-white transition-all duration-300"
+            className="relative mt-8 block w-full overflow-hidden rounded-md px-5 py-4 text-center text-xl font-bold uppercase tracking-wider text-white transition-all duration-300 hold-press select-none touch-manipulation"
             style={{
               background:
                 activeButton === "robotConfigSave" && buttonPressProgress > 0
                   ? `linear-gradient(to right, #4caf50 ${buttonPressProgress}%, var(--theme-accent) ${buttonPressProgress}%)`
                   : "var(--theme-accent)",
             }}
+            onContextMenu={(e) => e.preventDefault()}
             onMouseDown={() => startLongPress("robotConfigSave")}
             onMouseUp={cancelLongPress}
             onMouseLeave={cancelLongPress}
@@ -1139,13 +1140,14 @@ export default function RobotDashboard() {
           </button>
           <button
             type="button"
-            className="relative mt-2 block w-full overflow-hidden rounded-md px-5 py-4 text-center text-xl font-bold uppercase tracking-wider text-white transition-all duration-300"
+            className="relative mt-2 block w-full overflow-hidden rounded-md px-5 py-4 text-center text-xl font-bold uppercase tracking-wider text-white transition-all duration-300 hold-press select-none touch-manipulation"
             style={{
               background:
                 activeButton === "robotConfigReset" && buttonPressProgress > 0
                   ? `linear-gradient(to right, #4caf50 ${buttonPressProgress}%, #333 ${buttonPressProgress}%)`
                   : "#333",
             }}
+            onContextMenu={(e) => e.preventDefault()}
             onMouseDown={() => startLongPress("robotConfigReset")}
             onMouseUp={cancelLongPress}
             onMouseLeave={cancelLongPress}
@@ -1707,12 +1709,13 @@ export default function RobotDashboard() {
               </div>
               
               <button
-                className="text-white text-xl font-bold py-4 px-5 rounded-md w-full block text-center uppercase tracking-wider transition-all duration-300 mt-8 relative overflow-hidden"
+                className="text-white text-xl font-bold py-4 px-5 rounded-md w-full block text-center uppercase tracking-wider transition-all duration-300 mt-8 relative overflow-hidden hold-press select-none touch-manipulation"
                 style={{
-                  background: activeButton === 'update' && buttonPressProgress > 0 
+                  background: activeButton === 'update' && buttonPressProgress > 0
                     ? `linear-gradient(to right, #4caf50 ${buttonPressProgress}%, var(--theme-accent) ${buttonPressProgress}%)`
                     : "var(--theme-accent)",
                 }}
+                onContextMenu={(e) => e.preventDefault()}
                 onMouseDown={() => startLongPress('update')}
                 onMouseUp={cancelLongPress}
                 onMouseLeave={cancelLongPress}
@@ -1724,12 +1727,13 @@ export default function RobotDashboard() {
               
               {/* After the update button, add DEFAULT button */}
               <button
-                className="text-white text-xl font-bold py-4 px-5 rounded-md w-full block text-center uppercase tracking-wider transition-all duration-300 mt-2 relative overflow-hidden"
+                className="text-white text-xl font-bold py-4 px-5 rounded-md w-full block text-center uppercase tracking-wider transition-all duration-300 mt-2 relative overflow-hidden hold-press select-none touch-manipulation"
                 style={{
-                  background: activeButton === 'reset' && buttonPressProgress > 0 
+                  background: activeButton === 'reset' && buttonPressProgress > 0
                     ? `linear-gradient(to right, #4caf50 ${buttonPressProgress}%, #333 ${buttonPressProgress}%)`
                     : '#333'
                 }}
+                onContextMenu={(e) => e.preventDefault()}
                 onMouseDown={() => startLongPress('reset')}
                 onMouseUp={cancelLongPress}
                 onMouseLeave={cancelLongPress}

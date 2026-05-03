@@ -16,13 +16,14 @@ export function RosBridgeFloat() {
     <div
       className={`fixed ${
         isHalfScreen ? "bottom-30" : "bottom-20"
-      } right-6 z-50 flex max-w-[min(100%,calc(100vw-1.5rem))] cursor-pointer select-none items-center gap-6 rounded-2xl border-2 border-[#444] bg-black/70 px-5 py-4 shadow-2xl backdrop-blur-md transition-all duration-300 sm:right-8 sm:gap-8 sm:px-8 sm:py-5`}
+      } right-6 z-50 flex max-w-[min(100%,calc(100vw-1.5rem))] cursor-pointer select-none touch-manipulation hold-press items-center gap-6 rounded-2xl border-2 border-[#444] bg-black/70 px-5 py-4 shadow-2xl backdrop-blur-md transition-all duration-300 sm:right-8 sm:gap-8 sm:px-8 sm:py-5`}
       style={{
         background:
           pressProgress > 0
             ? `linear-gradient(to right, rgba(76, 175, 80, 0.8) ${pressProgress}%, rgba(0, 0, 0, 0.7) ${pressProgress}%)`
             : "rgba(0, 0, 0, 0.7)",
       }}
+      onContextMenu={(e) => e.preventDefault()}
       onMouseDown={() => {
         const timer = setInterval(() => {
           setPressProgress((prev: number) => {

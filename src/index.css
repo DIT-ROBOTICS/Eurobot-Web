@@ -53,6 +53,15 @@ input[type="range"] {
   touch-action: pan-x;
 }
 
+/* Hold-to-confirm targets: suppress iOS callout, Android selection menu, and text selection magnifier on long press. Pair with Tailwind `select-none touch-manipulation`. */
+.hold-press {
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
 @theme inline {
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);

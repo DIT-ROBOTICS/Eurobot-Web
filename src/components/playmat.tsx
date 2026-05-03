@@ -623,9 +623,11 @@ export default function Playmat() {
                     </Popover.Trigger>
                     <Popover.Portal>
                       <Popover.Content
-                        className="z-[200] w-[var(--radix-popover-trigger-width)] max-h-72 overflow-y-auto rounded-xl border border-[#333] bg-[#0a0a0a] p-1 shadow-2xl"
-                        sideOffset={4}
+                        className="z-[200] w-[36rem] max-w-[calc(100vw-2rem)] max-h-[min(34rem,var(--radix-popover-content-available-height))] overflow-y-auto overscroll-contain rounded-2xl border border-[#333] bg-[#0a0a0a] p-2 shadow-2xl"
+                        sideOffset={9}
                         align="start"
+                        collisionPadding={16}
+                        avoidCollisions
                         onOpenAutoFocus={(e) => e.preventDefault()}
                       >
                         {plans.map((plan: PlanSequence) => (
@@ -637,7 +639,7 @@ export default function Playmat() {
                               setPlanMenuOpen(false);
                             }}
                             className={clsx(
-                              "w-full text-left px-3 py-3 text-lg rounded-lg transition-colors",
+                              "w-full text-left px-5 py-[1.375rem] min-h-[5rem] text-[1.625rem] rounded-xl transition-colors select-none touch-manipulation",
                               selectedPlanId === plan.id
                                 ? "text-white"
                                 : "text-[#ccc] hover:bg-[#1a1a1a] hover:text-white"
@@ -683,7 +685,8 @@ export default function Playmat() {
             <div className="flex items-center justify-between gap-4">
               {/* Reset Button */}
               <div
-                className="flex-1 relative group"
+                className="flex-1 relative group hold-press select-none touch-manipulation"
+                onContextMenu={(e) => e.preventDefault()}
                 onMouseDown={() => {
                   const timer = setInterval(() => {
                     setPressProgress((prev: number) => {
