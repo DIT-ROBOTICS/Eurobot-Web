@@ -184,24 +184,25 @@ export default function Playmat() {
   const [currentSequence, setCurrentSequence] = useState<number[]>([]);
   const [plans, setPlans] = useState<PlanSequence[]>(DEFAULT_PLANS);
   const [selectedPlanId, setSelectedPlanId] = useState<number | null>(null);
-  
-  // UI interaction states  
-  const [isConfirming, setIsConfirming] = useState(false);
-  const [isSuccess, setIsSuccess] = useState(false);
-  
+  // The plan ID that has been explicitly confirmed by the user. Only this value
+  // is exposed over the ROS service — selecting/auto-detecting must NOT change it.
+  const [confirmedPlanId, setConfirmedPlanId] = useState<number | null>(null);
+
+  const isConfirmed = selectedPlanId !== null && selectedPlanId === confirmedPlanId;
+
   // Service server states managed via refs
-  
-  // Use ref to store the latest selectedPlanId for service callback access
-  const selectedPlanIdRef = useRef<number | null>(null);
-  
+
+  // Ref so the service callback always reads the latest confirmed value without
+  // re-advertising the service on every state change.
+  const confirmedPlanIdRef = useRef<number | null>(null);
+
   // Use ref to store ROS connection and service server to prevent recreation
   const rosConnectionRef = useRef<any>(null);
   const serviceServerRef = useRef<any>(null);
-  
-  // Sync selectedPlanId to ref
+
   useEffect(() => {
-    selectedPlanIdRef.current = selectedPlanId;
-  }, [selectedPlanId]);
+    confirmedPlanIdRef.current = confirmedPlanId;
+  }, [confirmedPlanId]);
   
   // Sync playmat background changes from Control Panel / backup restore.
   useEffect(() => {
@@ -409,7 +410,8 @@ export default function Playmat() {
       }
       setCurrentSequence((prevSeq: number[]) => {
         const newSeq = [...prevSeq, missionId];
-        setSelectedPlanId(findMostSimilarPlan(newSeq));
+        // Don't auto-reassign selectedPlanId here: clicking mission buttons must
+        // not flip the Confirm state. Auto-detection is only for initial load.
         void updateButtonStatesAndSequence(newStates, newSeq);
         return newSeq;
       });
@@ -458,8 +460,9 @@ export default function Playmat() {
       // Handle service requests
       server.advertise((request: any, response: any) => {
         void request;
-        // Get current selected plan ID from ref (always up-to-date)
-        const planId = selectedPlanIdRef.current || 0;
+        // Only expose the confirmed plan. If the user hasn't confirmed (or has
+        // reset), return 0 so downstream knows no plan is locked in yet.
+        const planId = confirmedPlanIdRef.current ?? 0;
         response.success = true;
         response.message = planId.toString();
         return true;
@@ -490,14 +493,7 @@ export default function Playmat() {
   // Handle confirm button
   const handleConfirm = () => {
     if (selectedPlanId) {
-      setIsConfirming(true);
-      setIsSuccess(true);
-      
-      // Show success state for 2 seconds, then reset
-      setTimeout(() => {
-        setIsSuccess(false);
-        setIsConfirming(false);
-      }, 2000);
+      setConfirmedPlanId(selectedPlanId);
     }
   };
 
@@ -505,8 +501,7 @@ export default function Playmat() {
   const handleReset = () => {
     setCurrentSequence([]);
     setSelectedPlanId(null);
-    setIsConfirming(false);
-    setIsSuccess(false);
+    setConfirmedPlanId(null);
     const resetStates = defaultMissionButtonStates();
     setToggleStates(resetStates);
     void updateButtonStatesAndSequence(resetStates, []);
@@ -752,22 +747,22 @@ export default function Playmat() {
               {/* Confirm Button */}
               <button
                 onClick={handleConfirm}
-                disabled={!selectedPlanId || isConfirming}
+                disabled={!selectedPlanId || isConfirmed}
                 className={`flex-1 px-6 py-3 rounded-xl font-medium transition-all ${
                   !selectedPlanId
                     ? 'bg-[#121212] text-[#666666] cursor-not-allowed border border-[#333333]'
-                    : isSuccess
+                    : isConfirmed
                     ? 'bg-green-600 text-white border border-green-600'
                     : 'bg-white text-black hover:bg-[#f0f0f0] shadow-lg shadow-white/20'
                 }`}
               >
                 <div className="flex items-center justify-center gap-2">
-                  {isSuccess ? (
+                  {isConfirmed ? (
                     <>
                       <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                       </svg>
-                      <span>Plan Confirmed</span>
+                      <span>Plan {confirmedPlanId} Confirmed</span>
                     </>
                   ) : (
                     <>
