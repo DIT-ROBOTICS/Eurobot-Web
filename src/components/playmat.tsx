@@ -179,6 +179,8 @@ export default function Playmat() {
   // Long press reset state
   const [pressTimer, setPressTimer] = useState<any>(null);
   const [pressProgress, setPressProgress] = useState(0);
+  // Brief visual flash after a successful reset
+  const [resetFlash, setResetFlash] = useState(false);
   
   // Plan management states
   const [currentSequence, setCurrentSequence] = useState<number[]>([]);
@@ -505,6 +507,8 @@ export default function Playmat() {
     const resetStates = defaultMissionButtonStates();
     setToggleStates(resetStates);
     void updateButtonStatesAndSequence(resetStates, []);
+    setResetFlash(true);
+    setTimeout(() => setResetFlash(false), 600);
   };
 
   // Get button visual state
@@ -732,16 +736,25 @@ export default function Playmat() {
                   }
                 }}
               >
-                <div className="flex items-center justify-center gap-3 px-6 py-3 bg-[#121212] rounded-xl border border-white hover:bg-white/5 transition-all cursor-pointer">
+                <div
+                  className={clsx(
+                    "relative flex items-center justify-center gap-3 px-6 py-3 rounded-xl border transition-all cursor-pointer overflow-hidden",
+                    resetFlash
+                      ? "bg-green-600 border-green-600"
+                      : "bg-[#121212] border-white hover:bg-white/5"
+                  )}
+                >
                   <div className="relative">
                     <div className="w-4 h-4 rounded-full bg-white"></div>
                     <div className="absolute inset-0 w-4 h-4 rounded-full bg-white animate-ping opacity-75"></div>
                   </div>
-                  <span className="text-white font-medium">Hold to Reset</span>
+                  <span className="text-white font-medium">
+                    {resetFlash ? "Reset Done" : "Hold to Reset"}
+                  </span>
+                  {pressProgress > 0 && (
+                    <div className="pointer-events-none absolute bottom-0 left-0 h-1 bg-white transition-all" style={{ width: `${pressProgress}%` }}></div>
+                  )}
                 </div>
-                {pressProgress > 0 && (
-                  <div className="absolute bottom-0 left-0 h-1 bg-white rounded-b-xl transition-all" style={{ width: `${pressProgress}%` }}></div>
-                )}
               </div>
 
               {/* Confirm Button */}
