@@ -5,6 +5,17 @@ on:
     branches:
       - "eurobot-20[0-9][0-9]"
       - "Eurobot-20[0-9][0-9]"
+    paths-ignore:
+      - "**/*.md"
+      - "LICENSE"
+      - "docs/**"
+      - ".gitignore"
+      - ".gitattributes"
+      - ".editorconfig"
+      - ".vscode/**"
+      - ".idea/**"
+      - ".github/**"
+      - "!.github/workflows/**"
   workflow_dispatch:
     inputs:
       year:
