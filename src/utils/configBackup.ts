@@ -113,9 +113,7 @@ function readLocalForBackup(): Record<string, string> {
     try {
       const v = localStorage.getItem(k);
       if (v != null) o[k] = v;
-    } catch {
-      /* */
-    }
+    } catch {}
   }
   return o;
 }
@@ -126,9 +124,7 @@ function setLocalFromManifest(m: EurobotBackupManifest): void {
     try {
       if (v === undefined) localStorage.removeItem(k);
       else localStorage.setItem(k, v);
-    } catch {
-      /* */
-    }
+    } catch {}
   }
 }
 
@@ -144,9 +140,7 @@ function applyDefaultLocalSettings(): void {
     localStorage.setItem(APP_LAYOUT_VERTICAL_PANEL_KEY, "0");
     localStorage.setItem(APP_LAYOUT_IS_HALF_SCREEN_KEY, "false");
     localStorage.removeItem(EUROBOT_GLB_ID_LIST_KEY);
-  } catch {
-    /* */
-  }
+  } catch {}
   saveSimaNames(getDefaultSimaNames());
   setActiveGlbId(null);
   setThemeAccent(DEFAULT_THEME_ACCENT);
@@ -351,9 +345,7 @@ export async function resetAllDataToFactoryDefaults(): Promise<void> {
   for (const k of CONFIG_BACKUP_STORAGE_KEYS) {
     try {
       localStorage.removeItem(k);
-    } catch {
-      /* */
-    }
+    } catch {}
   }
   await clearGlbAndSponsorObjectStores();
   applyDefaultLocalSettings();

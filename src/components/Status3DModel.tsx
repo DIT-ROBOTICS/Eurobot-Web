@@ -13,9 +13,7 @@ function sendToIframe(iframe: HTMLIFrameElement | null, msg: object) {
   if (!iframe?.contentWindow) return;
   try {
     iframe.contentWindow.postMessage(msg, "*");
-  } catch {
-    /* */
-  }
+  } catch {}
 }
 
 export default function Status3DModel() {
@@ -29,9 +27,7 @@ export default function Status3DModel() {
     if (loadedUrl.current && loadedUrl.current !== url) {
       try {
         URL.revokeObjectURL(loadedUrl.current);
-      } catch {
-        /* */
-      }
+      } catch {}
     }
     loadedUrl.current = url;
     sendToIframe(iframe, { type: "eurobot-set-model", src: url });
@@ -67,9 +63,7 @@ export default function Status3DModel() {
         if (loadedUrl.current) {
           try {
             URL.revokeObjectURL(loadedUrl.current);
-          } catch {
-            /* */
-          }
+          } catch {}
         }
         const url = await getActiveGlbObjectUrl();
         if (url) loadedUrl.current = url;
@@ -85,9 +79,7 @@ export default function Status3DModel() {
       if (loadedUrl.current) {
         try {
           URL.revokeObjectURL(loadedUrl.current);
-        } catch {
-          /* */
-        }
+        } catch {}
       }
     };
   }, []);

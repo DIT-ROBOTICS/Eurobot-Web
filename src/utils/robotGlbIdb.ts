@@ -85,9 +85,7 @@ export async function syncGlbIdListToLocalStorage(): Promise<void> {
   const list = await listGlbModels();
   try {
     localStorage.setItem(EUROBOT_GLB_ID_LIST_KEY, JSON.stringify(list.map((x) => x.id)));
-  } catch {
-    /* */
-  }
+  } catch {}
 }
 
 export async function putGlbModel(record: GlbModelRecord): Promise<void> {

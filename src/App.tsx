@@ -412,7 +412,6 @@ function App() {
       </div>
 
       {/* L1: bottom page dots + vertical nav */}
-      {/* 不要用 p-* 一鍵四邊再疊 pb-*：p-2 的 bottom 與 pb-3 只差 4px，幾乎看不出來；改用分開的 pt/px 與較大的 pb */}
       <div
         className="pointer-events-none absolute right-7 bottom-0 z-30 px-2 pt-2 pb-5 sm:px-2.5 sm:pt-2.5 sm:pb-6"
       >

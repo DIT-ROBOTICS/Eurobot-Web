@@ -11,9 +11,7 @@ export function useIsHalfScreen(): boolean {
     const check = () => {
       try {
         setIsHalfScreen(localStorage.getItem(APP_LAYOUT_IS_HALF_SCREEN_KEY) === "true");
-      } catch {
-        /* */
-      }
+      } catch {}
     };
     check();
     window.addEventListener("storage", check);

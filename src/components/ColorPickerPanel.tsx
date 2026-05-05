@@ -245,9 +245,7 @@ export function ColorPickerPanel({ value, onHexChange, onApply, fallbackHex }: P
   const onSvPointerUp = (e: React.PointerEvent) => {
     try {
       (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
-    } catch {
-      /* */
-    }
+    } catch {}
     dragging.current = false;
   };
 

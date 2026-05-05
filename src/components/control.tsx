@@ -121,9 +121,7 @@ export default function ControlAreas() {
     document.querySelectorAll("iframe").forEach((f) => {
       try {
         f.contentWindow?.postMessage({ type: "eurobot-theme", accent }, "*");
-      } catch {
-        /* */
-      }
+      } catch {}
     });
   };
 
@@ -137,9 +135,7 @@ export default function ControlAreas() {
     const forStorage = toApply.trim() || DEFAULT_THEME_ACCENT;
     try {
       localStorage.setItem(THEME_ACCENT_KEY, forStorage);
-    } catch {
-      /* */
-    }
+    } catch {}
     setThemeAccent(toApply);
     setThemeInput(toApply);
     window.dispatchEvent(new Event("eurobot-theme-refresh"));
@@ -151,9 +147,7 @@ export default function ControlAreas() {
     setHostname(v);
     try {
       localStorage.setItem(BMS_HOSTNAME_KEY, v);
-    } catch {
-      /* */
-    }
+    } catch {}
     window.dispatchEvent(new Event("eurobot-bms-hostname"));
   };
 
@@ -194,9 +188,7 @@ export default function ControlAreas() {
     setBgId(id);
     try {
       localStorage.setItem(PLAYMAT_BG_ID_KEY, id);
-    } catch {
-      /* */
-    }
+    } catch {}
     window.dispatchEvent(new Event("eurobot-playmat-bg"));
   };
 
@@ -249,9 +241,7 @@ export default function ControlAreas() {
       window.setTimeout(() => {
         try {
           location.reload();
-        } catch {
-          /* */
-        }
+        } catch {}
       }, 200);
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
@@ -285,9 +275,7 @@ export default function ControlAreas() {
       window.setTimeout(() => {
         try {
           location.reload();
-        } catch {
-          /* */
-        }
+        } catch {}
       }, 200);
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
@@ -557,9 +545,7 @@ export default function ControlAreas() {
                         setThemeAccent(c);
                         try {
                           localStorage.setItem(THEME_ACCENT_KEY, c);
-                        } catch {
-                          /* */
-                        }
+                        } catch {}
                         window.dispatchEvent(new Event("eurobot-theme-refresh"));
                         broadcastThemeIframes(c);
                       }}
