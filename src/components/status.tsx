@@ -94,9 +94,7 @@ export default function RobotDashboard() {
   const [navProfile, setNavProfile] = useState("slow"); // Default navigation profile
   const [simaStartTime, setSimaStartTime] = useState(85); // Default SIMA start time
   const [planCode, setPlanCode] = useState(1); // Add new state for SIMA plan code
-  const [showConfirmDialog, setShowConfirmDialog] = useState(false); // For confirmation dialog
-  const [paramsToUpdate, setParamsToUpdate] = useState<string | null>(null); // Which parameters to update
-  const [buttonPressTimer, setButtonPressTimer] = useState<any>(null);
+  const [buttonPressTimer, setButtonPressTimer] = useState<ReturnType<typeof setTimeout> | null>(null);
   const [buttonPressProgress, setButtonPressProgress] = useState(0);
   const [activeButton, setActiveButton] = useState<string | null>(null);
 
@@ -148,16 +146,14 @@ export default function RobotDashboard() {
   const sponsorPreviewSrc = useMemo(() => {
     if (!sponsorPreviewRec) return "";
     return recordToObjectUrl(sponsorPreviewRec);
-  }, [sponsorIndex, sponsorPreviewRec]);
+  }, [sponsorPreviewRec]);
 
   useEffect(() => {
     return () => {
       if (sponsorPreviewSrc?.startsWith("blob:")) {
         try {
           URL.revokeObjectURL(sponsorPreviewSrc);
-        } catch {
-          /* */
-        }
+        } catch {}
       }
     };
   }, [sponsorPreviewSrc]);
@@ -178,17 +174,13 @@ export default function RobotDashboard() {
       if (plugPubRef.current) {
         try {
           plugPubRef.current.unadvertise?.();
-        } catch {
-          /* */
-        }
+        } catch {}
         plugPubRef.current = null;
       }
       if (onTakePubRef.current) {
         try {
           onTakePubRef.current.unadvertise?.();
-        } catch {
-          /* */
-        }
+        } catch {}
         onTakePubRef.current = null;
       }
       return;
@@ -201,15 +193,11 @@ export default function RobotDashboard() {
       if (p)
         try {
           p.unadvertise?.();
-        } catch {
-          /* */
-        }
+        } catch {}
       if (t)
         try {
           t.unadvertise?.();
-        } catch {
-          /* */
-        }
+        } catch {}
     };
   }, [rosConnected, createPublisher]);
 
@@ -244,8 +232,8 @@ export default function RobotDashboard() {
 
     const batteryTopic = getTopicHandler("/robot_status/battery_voltage", "std_msgs/msg/Float32");
     if (batteryTopic) {
-      batteryTopic.subscribe((message: any) => {
-        const voltage = parseFloat(message.data);
+      batteryTopic.subscribe((message: ROSLIBMessage) => {
+        const voltage = parseFloat(String(message.data));
         if (isNaN(voltage)) return;
         lastBatteryMsgAtRef.current = Date.now();
         hasReceivedBatteryRef.current = true;
@@ -278,14 +266,14 @@ export default function RobotDashboard() {
       };
 
       // Create topics and subscribe
-    const deviceTopics: Record<string, any> = {};
+    const deviceTopics: Record<string, ROSLIB.Topic | null> = {};
       Object.entries(deviceTopicNames).forEach(([device, topicName]) => {
       const topic = getTopicHandler(topicName, 'std_msgs/msg/Bool');
       if (topic) {
-        topic.subscribe((message: any) => {
+        topic.subscribe((message: ROSLIBMessage) => {
           setDeviceStatus((prev: DeviceStatusType) => ({
             ...prev,
-            [device]: message.data
+            [device]: Boolean(message.data)
           }));
         });
         deviceTopics[device] = topic;
@@ -295,7 +283,7 @@ export default function RobotDashboard() {
     // Subscribe to robot ready signal (over plug interface)
     const plugTopic = getTopicHandler('/robot/startup/plug', 'std_msgs/msg/Bool');
     if (plugTopic) {
-      plugTopic.subscribe((message: any) => {
+      plugTopic.subscribe((message: ROSLIBMessage) => {
         if (message.data) {
           // If we receive a true signal, update the connected status and record the timestamp
           setPlugConnected(true);
@@ -309,12 +297,13 @@ export default function RobotDashboard() {
 
     const groupsStateTopic = getTopicHandler("/robot/startup/groups_state", "std_msgs/msg/Int32MultiArray");
     if (groupsStateTopic) {
-      groupsStateTopic.subscribe((message: any) => {
-        if (message.data && Array.isArray(message.data)) {
+      groupsStateTopic.subscribe((message: ROSLIBMessage) => {
+        const data = message.data;
+        if (Array.isArray(data)) {
           const newStatusUpdate: Partial<SystemGroupStatusState> = {};
           systemGroupOrder.forEach((name, index) => {
-            if (message.data.length > index) {
-              newStatusUpdate[name] = message.data[index];
+            if (data.length > index) {
+              newStatusUpdate[name] = data[index];
             } else {
               newStatusUpdate[name] = null;
             }
@@ -327,16 +316,16 @@ export default function RobotDashboard() {
 
     const gameTimeTopic = getTopicHandler("/robot/startup/game_time", "std_msgs/msg/Float32");
     if (gameTimeTopic) {
-      gameTimeTopic.subscribe((message: any) => {
-        const v = parseFloat(message.data);
+      gameTimeTopic.subscribe((message: ROSLIBMessage) => {
+        const v = parseFloat(String(message.data));
         if (!isNaN(v)) setGameTimeVal(v);
       });
     }
 
     const gameScoreTopic = getTopicHandler("/game_score", "std_msgs/msg/Int32");
     if (gameScoreTopic) {
-      gameScoreTopic.subscribe((message: any) => {
-        const s = parseInt(message.data, 10);
+      gameScoreTopic.subscribe((message: ROSLIBMessage) => {
+        const s = parseInt(String(message.data), 10);
         if (!isNaN(s)) setGameScore(s);
       });
     }
@@ -352,7 +341,7 @@ export default function RobotDashboard() {
       }
       
       // Unsubscribe from all device topics
-      Object.values(deviceTopics).forEach((topic: any) => {
+      Object.values(deviceTopics).forEach((topic) => {
         if (topic) {
           try {
             topic.unsubscribe();
@@ -415,12 +404,10 @@ export default function RobotDashboard() {
       parts.forEach(({ t }) => {
         try {
           t.unsubscribe();
-        } catch {
-          /* */
-        }
+        } catch {}
       });
     };
-  }, [rosConnected, getTopicHandler, simaNames.join("|")]);
+  }, [rosConnected, getTopicHandler, simaNames]);
 
   // Add a timeout effect to reset plugConnected to false if no true signal received for 5 seconds
   useEffect(() => {
@@ -578,68 +565,13 @@ export default function RobotDashboard() {
           if (data.sima_start_time !== undefined) setSimaStartTime(data.sima_start_time);
           if (data.plan_code !== undefined) setPlanCode(data.plan_code);
         }
-      } catch (error: any) { // Add type for error
+      } catch (error) {
         console.error("Error fetching SIMA parameters:", error);
       }
     };
     fetchSimaParams();
   }, []);
 
-  // Function to update SIMA parameters
-  const handleUpdateSimaParams = async () => {
-    try {
-      const response = await fetch('/api/sima-params', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          sima_start_time: simaStartTime,
-          plan_code: planCode
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error(`HTTP error ${response.status}`);
-      }
-
-      const data = await response.json();
-
-      if (data.success) {
-        setUpdateStatus({ message: 'SIMA parameters updated successfully', isError: false, visible: true });
-        setTimeout(() => setUpdateStatus((prev: UpdateStatus) => ({ ...prev, visible: false })), 3000); // Add type for prev
-      } else {
-        throw new Error(data.message || 'Update failed');
-      }
-    } catch (error: any) { // Add type for error
-      console.error('Error updating SIMA parameters:', error);
-      setUpdateStatus({ message: `Error: ${error.message}`, isError: true, visible: true });
-      setTimeout(() => setUpdateStatus((prev: UpdateStatus) => ({ ...prev, visible: false })), 3000); // Add type for prev
-    }
-  };
-  
-  // Function to handle long press updates
-  const handleLongPressUpdate = async () => {
-    if (activeButton === 'rival') handleUpdateRivalRadius(rivalRadius);
-    else if (activeButton === 'dock') handleUpdateDockRivalParams();
-    else if (activeButton === 'nav') handleUpdateNavParams();
-    else if (activeButton === 'sima') handleUpdateSimaParams();
-    else if (activeButton === 'reset') resetToDefaults();
-  };
-
-  // Remove duplicate updateParameters function
-  const handleUpdateRivalRadius = async (newRadius: number) => {
-    await updateParameters('rival');
-  };
-
-  const handleUpdateDockRivalParams = async () => {
-      await updateParameters('dock');
-  };
-  
-  const handleUpdateNavParams = async () => {
-      await updateParameters('nav');
-  };
-  
   // Consolidated update parameters function
   const updateParameters = async (paramType: string) => {
     setUpdateStatus({ message: 'Updating...', isError: false, visible: true });
@@ -716,12 +648,12 @@ export default function RobotDashboard() {
       } else {
         throw new Error(data.message || 'Update failed');
       }
-    } catch (error: any) { // Add type for error
+    } catch (error) {
       console.error(`Error updating ${paramType} parameters:`, error);
-      setUpdateStatus({ 
-        message: `Error: ${error instanceof Error ? error.message : 'Unknown error'}`, 
-        isError: true, 
-        visible: true 
+      setUpdateStatus({
+        message: `Error: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        isError: true,
+        visible: true
       });
       setTimeout(() => setUpdateStatus((prev: UpdateStatus) => ({ ...prev, visible: false })), 3000); // Add type for prev
     }
@@ -748,9 +680,9 @@ export default function RobotDashboard() {
       } else {
         throw new Error('Some parameters failed to update');
       }
-    } catch (error: any) { // Add type for error
+    } catch (error) {
       console.error("Error updating all parameters:", error);
-      setUpdateStatus({ message: `Error: ${error.message}`, isError: true, visible: true });
+      setUpdateStatus({ message: `Error: ${error instanceof Error ? error.message : 'Unknown error'}`, isError: true, visible: true });
     }
     setTimeout(() => setUpdateStatus((prev: UpdateStatus) => ({ ...prev, visible: false })), 3000); // Add type for prev
   };
@@ -887,9 +819,9 @@ export default function RobotDashboard() {
       } else {
         throw new Error(data.message || 'Failed to reset parameters or parse defaults');
       }
-    } catch (error: any) { 
+    } catch (error) {
       console.error("Error resetting parameters:", error);
-      setUpdateStatus({ message: `Error: ${error.message}`, isError: true, visible: true });
+      setUpdateStatus({ message: `Error: ${error instanceof Error ? error.message : 'Unknown error'}`, isError: true, visible: true });
     }
     setTimeout(() => setUpdateStatus((prev: UpdateStatus) => ({ ...prev, visible: false })), 3000); 
   };
@@ -948,8 +880,7 @@ export default function RobotDashboard() {
 
   const callGameReady = useCallback(() => {
     // Four StartUpSrv calls (group 1–4, state=1); does not change System Status locally.
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const R = (window as any).ROSLIB;
+    const R = window.ROSLIB;
     if (!R) return;
     const srv = getServiceHandler("/robot/startup/ready_signal", STARTUP_SRV_TYPE);
     if (!srv) {
@@ -984,8 +915,7 @@ export default function RobotDashboard() {
 
   const sendGameStart = useCallback(() => {
     const t = plugPubRef.current;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const R = (window as any).ROSLIB;
+    const R = window.ROSLIB;
     if (t && R) {
       const M = R.Message;
       t.publish(new M({ data: true }));
@@ -994,8 +924,7 @@ export default function RobotDashboard() {
 
   const runTestOnTake = useCallback(() => {
     const t = onTakePubRef.current;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const R = (window as any).ROSLIB;
+    const R = window.ROSLIB;
     if (!t || !R) return;
     const M = R.Message;
     const layout = { dim: [] as { label: string; size: number; stride: number }[], data_offset: 0 };
@@ -2051,7 +1980,7 @@ export default function RobotDashboard() {
   );
 }
 
-function StatusItem({ color, label, key }: { color: string; label: string; key?: string }) { // Added key as an optional prop
+function StatusItem({ color, label }: { color: string; label: string }) {
   const colorMap: { [key: string]: string } = { // Added index signature to colorMap
     green: "bg-[#4caf50]",
     yellow: "bg-[#ffb74d]",

@@ -57,6 +57,15 @@ function migrateButtonLoad(states: Record<number, boolean | undefined>, sequence
 }
 
 // Define plan sequence type
+function calculateSimilarity(seq1: number[], seq2: number[]): number {
+  let matches = 0;
+  const minLength = Math.min(seq1.length, seq2.length);
+  for (let i = 0; i < minLength; i++) {
+    if (seq1[i] === seq2[i]) matches++;
+  }
+  return matches / Math.max(seq1.length, seq2.length);
+}
+
 interface PlanSequence {
   id: number;
   sequence: number[];
@@ -172,12 +181,9 @@ export default function Playmat() {
   const [estimatedScore, setEstimatedScore] = useState(128);
   const isHalfScreen = useIsHalfScreen();
   const { connected, getTopicHandler, getServiceServer } = useRosConnection();
-  // For storing button states
-  const [toggleStates, setToggleStates] = useState<Record<number, boolean>>(() => defaultMissionButtonStates());
-  // Loading state
+  const [, setToggleStates] = useState<Record<number, boolean>>(() => defaultMissionButtonStates());
   const [isLoading, setIsLoading] = useState(true);
-  // Long press reset state
-  const [pressTimer, setPressTimer] = useState<any>(null);
+  const [pressTimer, setPressTimer] = useState<ReturnType<typeof setTimeout> | null>(null);
   const [pressProgress, setPressProgress] = useState(0);
   // Brief visual flash after a successful reset
   const [resetFlash, setResetFlash] = useState(false);
@@ -198,20 +204,36 @@ export default function Playmat() {
   // re-advertising the service on every state change.
   const confirmedPlanIdRef = useRef<number | null>(null);
 
-  // Use ref to store ROS connection and service server to prevent recreation
-  const rosConnectionRef = useRef<any>(null);
-  const serviceServerRef = useRef<any>(null);
+  const rosConnectionRef = useRef<ROSLIB.Ros | null>(null);
+  const serviceServerRef = useRef<ROSLIB.Service | null>(null);
 
   useEffect(() => {
     confirmedPlanIdRef.current = confirmedPlanId;
   }, [confirmedPlanId]);
-  
+
+  const findMostSimilarPlan = useCallback((sequence: number[]): number | null => {
+    if (sequence.length === 0) return null;
+
+    let maxSimilarity = 0;
+    let mostSimilarPlanId: number | null = null;
+
+    plans.forEach((p: PlanSequence) => {
+      const similarity = calculateSimilarity(sequence, p.sequence);
+      if (similarity > maxSimilarity) {
+        maxSimilarity = similarity;
+        mostSimilarPlanId = p.id;
+      }
+    });
+
+    return mostSimilarPlanId;
+  }, [plans]);
+
   // Sync playmat background changes from Control Panel / backup restore.
   useEffect(() => {
     const onPlaymat = () => {
       try {
         setPlaymatBgId(localStorage.getItem(PLAYMAT_BG_ID_KEY) || DEFAULT_PLAYMAT_BG_ID);
-      } catch { /* */ }
+      } catch {}
     };
     window.addEventListener('eurobot-playmat-bg', onPlaymat);
     return () => {
@@ -243,7 +265,7 @@ export default function Playmat() {
     };
 
     void fetchButtonStates();
-  }, []);
+  }, [findMostSimilarPlan]);
 
   // Subscribe to score topics from ROS
   useEffect(() => {
@@ -274,8 +296,8 @@ export default function Playmat() {
 
     if (scoreTopic) {
       // Subscribe to the primary score topic
-      scoreTopic.subscribe((message: any) => {
-        const score = parseInt(message.data);
+      scoreTopic.subscribe((message: ROSLIBMessage) => {
+        const score = parseInt(String(message.data));
         if (!isNaN(score)) {
           scoreReceived = true;
           lastScoreTime = Date.now();
@@ -286,8 +308,8 @@ export default function Playmat() {
 
     if (idealScoreTopic) {
       // Subscribe to the fallback score topic
-      idealScoreTopic.subscribe((message: any) => {
-        const score = parseInt(message.data);
+      idealScoreTopic.subscribe((message: ROSLIBMessage) => {
+        const score = parseInt(String(message.data));
         if (!isNaN(score) && !scoreReceived) {
           setEstimatedScore(score);
         }
@@ -296,8 +318,8 @@ export default function Playmat() {
 
     if (gameScoreTopic) {
       // Predicted / game score: drives the same "Estimated Score" on the playmat
-      gameScoreTopic.subscribe((message: any) => {
-        const score = parseInt(message.data, 10);
+      gameScoreTopic.subscribe((message: ROSLIBMessage) => {
+        const score = parseInt(String(message.data), 10);
         if (!isNaN(score)) setEstimatedScore(score);
       });
     }
@@ -371,38 +393,6 @@ export default function Playmat() {
     reader.readAsText(file);
   };
 
-  // Calculate sequence similarity
-  const calculateSimilarity = (seq1: number[], seq2: number[]): number => {
-    let matches = 0;
-    const minLength = Math.min(seq1.length, seq2.length);
-    
-    for (let i = 0; i < minLength; i++) {
-      if (seq1[i] === seq2[i]) {
-        matches++;
-      }
-    }
-    
-    return matches / Math.max(seq1.length, seq2.length);
-  };
-
-  // Find the most similar plan
-  const findMostSimilarPlan = (sequence: number[]): number | null => {
-    if (sequence.length === 0) return null;
-    
-    let maxSimilarity = 0;
-    let mostSimilarPlanId = null;
-    
-    plans.forEach((p: PlanSequence) => {
-      const similarity = calculateSimilarity(sequence, p.sequence);
-      if (similarity > maxSimilarity) {
-        maxSimilarity = similarity;
-        mostSimilarPlanId = p.id;
-      }
-    });
-    
-    return mostSimilarPlanId;
-  };
-
   // mission index 0-17: server derives pantry/collection and stores in button.json
   const handleButtonClick = (missionId: number) => {
     setToggleStates((prevStates: Record<number, boolean>) => {
@@ -460,8 +450,7 @@ export default function Playmat() {
       // Setup the service server
 
       // Handle service requests
-      server.advertise((request: any, response: any) => {
-        void request;
+      server.advertise((_request: ROSLIBServiceRequestData, response: ROSLIBServiceResponse) => {
         // Only expose the confirmed plan. If the user hasn't confirmed (or has
         // reset), return 0 so downstream knows no plan is locked in yet.
         const planId = confirmedPlanIdRef.current ?? 0;
@@ -490,7 +479,7 @@ export default function Playmat() {
         }
       }
     };
-  }, [connected]); // Only depend on connected state
+  }, [connected, getServiceServer]);
 
   // Handle confirm button
   const handleConfirm = () => {

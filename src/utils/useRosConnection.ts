@@ -1,14 +1,12 @@
 import { useState, useEffect, useCallback } from 'react';
 
-// Define the shape of our connection state
 interface RosConnectionState {
-  ros: any;
+  ros: ROSLIB.Ros | null;
   connected: boolean;
   url: string;
 }
 
-// Singleton instance for the ROS connection
-let rosInstance: any = null;
+let rosInstance: ROSLIB.Ros | null = null;
 let rosSubscribers = 0;
 const ROS_STATE_EVENT = 'eurobot-ros-connection-state';
 
@@ -17,11 +15,11 @@ function emitRosState(state: RosConnectionState): void {
   window.dispatchEvent(new CustomEvent<RosConnectionState>(ROS_STATE_EVENT, { detail: state }));
 }
 
-function isRosInstanceOpen(ros: any): boolean {
+function isRosInstanceOpen(ros: ROSLIB.Ros | null): boolean {
   return ros?.isConnected === true || ros?.socket?.readyState === WebSocket.OPEN;
 }
 
-function isRosInstanceConnecting(ros: any): boolean {
+function isRosInstanceConnecting(ros: ROSLIB.Ros | null): boolean {
   return ros?.socket?.readyState === WebSocket.CONNECTING;
 }
 
@@ -45,7 +43,7 @@ export function useRosConnection() {
     void _hostNumber;
     const rosUrl = `ws://localhost:9090`;
 
-    let reconnectTimer: any = null;
+    let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
     let reconnectAttempts = 0;
     let disposed = false;
     const maxReconnectAttempts = 10;
@@ -94,9 +92,7 @@ export function useRosConnection() {
         }
         try {
           rosInstance.close?.();
-        } catch {
-          /* */
-        }
+        } catch {}
         rosInstance = null;
       }
 
@@ -195,7 +191,7 @@ export function useRosConnection() {
       return null;
     }
 
-    return new (window as any).ROSLIB.Topic({
+    return new window.ROSLIB.Topic({
       ros: connectionState.ros,
       name: topicName,
       messageType: messageType
@@ -208,7 +204,7 @@ export function useRosConnection() {
       return null;
     }
 
-    return new (window as any).ROSLIB.Service({
+    return new window.ROSLIB.Service({
       ros: connectionState.ros,
       name: serviceName,
       serviceType: serviceType
@@ -221,7 +217,7 @@ export function useRosConnection() {
       return null;
     }
 
-    return new (window as any).ROSLIB.Service({
+    return new window.ROSLIB.Service({
       ros: connectionState.ros,
       name: serviceName,
       serviceType: serviceType
@@ -233,8 +229,7 @@ export function useRosConnection() {
     (topicName: string, messageType: string) => {
       if (typeof window === 'undefined' || !window.ROSLIB) return null;
       if (!connectionState.ros || !connectionState.connected) return null;
-      const T = (window as any).ROSLIB.Topic;
-      const topic = new T({
+      const topic = new window.ROSLIB.Topic({
         ros: connectionState.ros,
         name: topicName,
         messageType,

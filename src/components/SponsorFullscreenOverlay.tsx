@@ -345,7 +345,7 @@ export function SponsorFullscreenOverlay({ records, onClose, openOrigin, closeEx
 
   const satObjectUrls = useMemo(
     () => records.map((r) => recordToObjectUrl(r)),
-    [idKey, records]
+    [records]
   );
   useEffect(() => {
     return () => {
@@ -353,9 +353,7 @@ export function SponsorFullscreenOverlay({ records, onClose, openOrigin, closeEx
         if (u.startsWith("blob:")) {
           try {
             URL.revokeObjectURL(u);
-          } catch {
-            /* */
-          }
+          } catch {}
         }
       }
     };
@@ -365,7 +363,7 @@ export function SponsorFullscreenOverlay({ records, onClose, openOrigin, closeEx
     const n = records.length;
     if (n === 0) return { r: [] as number[], a: [] as number[] };
     return relaxSponsorOrbits(n, ringRadiusPx(n), nodeDiameters(n).sat, TIER_R_MUL);
-  }, [idKey, records.length]);
+  }, [records.length]);
 
   const applyOrbit = useCallback(
     (sweep: number, tSec: number) => {
@@ -568,6 +566,10 @@ export function SponsorFullscreenOverlay({ records, onClose, openOrigin, closeEx
     return () => window.removeEventListener("resize", onResize);
   }, [reduced]);
 
+  const markImgDecoded = useCallback((e: React.SyntheticEvent<HTMLImageElement>) => {
+    e.currentTarget.classList.add("sponsor-ov-asset__img--decode");
+  }, []);
+
   if (records.length === 0) return null;
 
   const { center, sat: satSize } = nodeDiameters(records.length);
@@ -575,10 +577,6 @@ export function SponsorFullscreenOverlay({ records, onClose, openOrigin, closeEx
     const b = import.meta.env.BASE_URL || "/";
     return b.endsWith("/") ? `${b}dit.png` : `${b}/dit.png`;
   })();
-
-  const markImgDecoded = useCallback((e: React.SyntheticEvent<HTMLImageElement>) => {
-    e.currentTarget.classList.add("sponsor-ov-asset__img--decode");
-  }, []);
 
   return (
     <div
