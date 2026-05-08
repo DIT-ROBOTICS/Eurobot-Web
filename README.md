@@ -83,7 +83,7 @@ Topics:
 /score
 /robot/startup/ideal_score
 /<sima_name>/status
-/robot/on_take
+/robot/on_put
 ```
 
 Services:
@@ -118,7 +118,7 @@ Replace `/<sima_name>/status` with the exact SIMA names configured in Control Pa
 | Topic | Type | Published by | Payload |
 |------|------|--------------|---------|
 | `/robot/startup/plug` | `std_msgs/msg/Bool` | Robot Status | Publishes `{ data: true }` when Game Start is triggered. |
-| `/robot/on_take` | `std_msgs/msg/Int32MultiArray` | Robot Status | HW Test publishes four messages at 400 ms intervals: `data` is `[1, 1, 1, 1, n]` with `n` in `0`…`3` (the fifth element is the test index). `layout` is an empty `dim` and `data_offset: 0`. |
+| `/robot/on_put` | `std_msgs/msg/Int16` | Robot Status | HW Test publishes four messages at 400 ms intervals with `data` in `0`…`3`. |
 
 ### Service Clients
 
